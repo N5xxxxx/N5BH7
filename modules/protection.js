@@ -1,37 +1,33 @@
 module.exports = (client) => {
 
-  const userMessages = new Map();
+  const spamMap = new Map();
 
   client.on("messageCreate", async (message) => {
-    if (!message.guild) return;
     if (message.author.bot) return;
+    if (!message.guild) return;
 
-    const userId = message.author.id;
+    // منع الروابط
+    if (message.content.includes("http")) {
+      await message.delete();
+      return message.channel.send("🚫 يمنع إرسال الروابط");
+    }
+
+    // مكافحة السبام
     const now = Date.now();
-
-    // منع المنشن السبامي
-    if (message.mentions.users.size > 5) {
-      await message.delete().catch(() => {});
-      return message.channel.send(`⚠️ ${message.author}, لا تسوي منشن سبام`)
-        .then(msg => setTimeout(() => msg.delete().catch(()=>{}), 4000));
-    }
-
-    // نظام Anti-Spam (5 رسائل خلال 5 ثواني)
-    if (!userMessages.has(userId)) {
-      userMessages.set(userId, []);
-    }
-
-    const timestamps = userMessages.get(userId);
+    const timestamps = spamMap.get(message.author.id) || [];
     timestamps.push(now);
+    spamMap.set(message.author.id, timestamps);
 
-    const recent = timestamps.filter(time => now - time < 5000);
-    userMessages.set(userId, recent);
-
-    if (recent.length > 5) {
-      await message.delete().catch(() => {});
-      message.channel.send(`🚫 ${message.author}, وقف سبام`)
-        .then(msg => setTimeout(() => msg.delete().catch(()=>{}), 4000));
+    if (timestamps.length > 5) {
+      await message.member.timeout(60000);
+      message.channel.send("🚫 تم إسكاتك بسبب السبام");
+      spamMap.delete(message.author.id);
     }
+
+    setTimeout(() => {
+      spamMap.delete(message.author.id);
+    }, 10000);
+
   });
 
 };
