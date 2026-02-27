@@ -11,20 +11,16 @@ const play = require("play-dl");
 
 module.exports = (client) => {
 
-  // مشغل واحد عام
   const player = createAudioPlayer({
     behaviors: { noSubscriber: NoSubscriberBehavior.Pause }
   });
 
-  // Queue لكل سيرفر
   const queue = new Map();
 
   async function playSong(guild, song) {
     const serverQueue = queue.get(guild.id);
 
     if (!song) {
-      // لا نطلع من الروم إذا عندك voice.js ماسكه 24/7
-      // بس نوقف التشغيل ونمسح الطابور
       player.stop();
       serverQueue.songs = [];
       return;
@@ -46,7 +42,6 @@ module.exports = (client) => {
     }
   }
 
-  // لما تخلص أغنية يشغل اللي بعدها
   player.on(AudioPlayerStatus.Idle, () => {
     const guildId = [...queue.keys()][0];
     if (!guildId) return;
@@ -56,31 +51,30 @@ module.exports = (client) => {
     playSong(client.guilds.cache.get(guildId), serverQueue.songs[0]);
   });
 
-  player.on("error", (err) => {
-    console.error("Player Error:", err);
-  });
-
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
     if (!message.guild) return;
 
-    // ================= تشغيل =================
     if (message.content.startsWith("!mus ")) {
 
       const voiceChannel = message.member.voice.channel;
       if (!voiceChannel)
-        return message.reply("❌ لازم تدخل روم صوتي أولاً");
-
-      const permissions = voiceChannel.permissionsFor(message.client.user);
-      if (!permissions.has("Connect") || !permissions.has("Speak"))
-        return message.reply("❌ ما عندي صلاحية دخول أو تكلم");
+        return message.reply("❌ ادخل روم صوتي أول");
 
       const query = message.content.slice(5).trim();
-      if (!query) return message.reply("❌ اكتب اسم الأغنية");
+      if (!query)
+        return message.reply("❌ اكتب اسم الأغنية");
 
-      const results = await play.search(query, { limit: 1 });
-      if (!results.length)
-        return message.reply("❌ ما لقيت الأغنية");
+      let results;
+
+      try {
+        results = await play.search(query, { source: { youtube: "video" }, limit: 1 });
+      } catch (err) {
+        return message.reply("❌ فشل البحث");
+      }
+
+      if (!results || results.length === 0 || !results[0].url)
+        return message.reply("❌ ما لقيت نتيجة صالحة");
 
       const song = {
         title: results[0].title,
@@ -88,8 +82,6 @@ module.exports = (client) => {
       };
 
       let serverQueue = queue.get(message.guild.id);
-
-      // 🔥 هنا الحل المهم — لا نعيد join إذا موجود
       let connection = getVoiceConnection(message.guild.id);
 
       if (!connection) {
@@ -102,7 +94,6 @@ module.exports = (client) => {
 
       if (!serverQueue) {
         serverQueue = {
-          voiceChannel,
           connection,
           songs: [],
         };
@@ -114,11 +105,10 @@ module.exports = (client) => {
       message.reply(`🎵 تمت الإضافة: **${song.title}**`);
 
       if (serverQueue.songs.length === 1) {
-        playSong(message.guild, serverQueue.songs[0]);
+        playSong(message.guild, song);
       }
     }
 
-    // ================= إيقاف =================
     if (message.content === "!stop") {
       const serverQueue = queue.get(message.guild.id);
       if (!serverQueue)
@@ -126,11 +116,9 @@ module.exports = (client) => {
 
       serverQueue.songs = [];
       player.stop();
-
-      message.reply("⏹ تم إيقاف الموسيقى");
+      message.reply("⏹ تم الإيقاف");
     }
 
-    // ================= تخطي =================
     if (message.content === "!skip") {
       const serverQueue = queue.get(message.guild.id);
       if (!serverQueue)
