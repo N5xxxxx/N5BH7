@@ -1,63 +1,55 @@
 const {
   createAudioPlayer,
   createAudioResource,
-  getVoiceConnection,
-  AudioPlayerStatus
+  joinVoiceChannel,
+  AudioPlayerStatus,
+  NoSubscriberBehavior
 } = require("@discordjs/voice");
 
-const ytSearch = require("yt-search");
-const ytdl = require("ytdl-core");
+const play = require("play-dl");
 
 module.exports = (client) => {
 
-  const player = createAudioPlayer();
-  let queue = [];
-  let currentGuildId = null;
-
-  // لما البوت يجهز، اربط المشغل بالاتصال الصوتي
-  client.once("clientReady", () => {
-    const guild = client.guilds.cache.first();
-    if (!guild) return;
-
-    const connection = getVoiceConnection(guild.id);
-    if (connection) {
-      connection.subscribe(player);
-      currentGuildId = guild.id;
-      console.log("🎵 Music system ready");
-    }
+  const player = createAudioPlayer({
+    behaviors: {
+      noSubscriber: NoSubscriberBehavior.Pause,
+    },
   });
 
-  async function playNext() {
-    if (!currentGuildId) return;
-    if (queue.length === 0) return;
+  const queue = new Map();
 
-    const song = queue.shift();
+  async function playSong(guild, song) {
+    const serverQueue = queue.get(guild.id);
+
+    if (!song) {
+      serverQueue.connection.destroy();
+      queue.delete(guild.id);
+      return;
+    }
 
     try {
-      const stream = ytdl(song.url, {
-        filter: "audioonly",
-        quality: "highestaudio",
-        highWaterMark: 1 << 25
-      });
+      const stream = await play.stream(song.url);
+      const resource = createAudioResource(stream.stream);
 
-      const resource = createAudioResource(stream);
       player.play(resource);
+      serverQueue.connection.subscribe(player);
 
-      console.log(`▶️ Now playing: ${song.title}`);
+      console.log(`▶️ Now Playing: ${song.title}`);
 
-    } catch (err) {
-      console.error("Music Error:", err);
-      playNext();
+    } catch (error) {
+      console.error("Play Error:", error);
+      serverQueue.songs.shift();
+      playSong(guild, serverQueue.songs[0]);
     }
   }
 
   player.on(AudioPlayerStatus.Idle, () => {
-    playNext();
-  });
+    const guildId = [...queue.keys()][0];
+    if (!guildId) return;
 
-  player.on("error", (error) => {
-    console.error("Player Error:", error);
-    playNext();
+    const serverQueue = queue.get(guildId);
+    serverQueue.songs.shift();
+    playSong(client.guilds.cache.get(guildId), serverQueue.songs[0]);
   });
 
   client.on("messageCreate", async (message) => {
@@ -66,38 +58,76 @@ module.exports = (client) => {
 
     // تشغيل
     if (message.content.startsWith("!mus ")) {
-      const query = message.content.slice(5).trim();
-      if (!query) return message.reply("❌ اكتب اسم الأغنية");
 
-      const search = await ytSearch(query);
-      const video = search.videos[0];
+      const voiceChannel = message.member.voice.channel;
+      if (!voiceChannel)
+        return message.reply("❌ لازم تدخل روم صوتي أولاً");
 
-      if (!video) return message.reply("❌ ما لقيت نتيجة");
+      const permissions = voiceChannel.permissionsFor(message.client.user);
+      if (!permissions.has("Connect") || !permissions.has("Speak"))
+        return message.reply("❌ ما عندي صلاحية دخول أو تكلم");
 
-      queue.push({
-        title: video.title,
-        url: video.url
-      });
+      const query = message.content.slice(5);
 
-      message.reply(`🎶 تمت الإضافة: **${video.title}**`);
+      const search = await play.search(query, { limit: 1 });
+      if (!search.length)
+        return message.reply("❌ ما لقيت الأغنية");
 
-      if (player.state.status !== AudioPlayerStatus.Playing) {
-        playNext();
+      const song = {
+        title: search[0].title,
+        url: search[0].url
+      };
+
+      let serverQueue = queue.get(message.guild.id);
+
+      if (!serverQueue) {
+
+        const connection = joinVoiceChannel({
+          channelId: voiceChannel.id,
+          guildId: message.guild.id,
+          adapterCreator: message.guild.voiceAdapterCreator,
+        });
+
+        serverQueue = {
+          voiceChannel,
+          connection,
+          songs: [],
+        };
+
+        queue.set(message.guild.id, serverQueue);
+      }
+
+      serverQueue.songs.push(song);
+
+      message.reply(`🎵 تمت الإضافة: **${song.title}**`);
+
+      if (serverQueue.songs.length === 1) {
+        playSong(message.guild, serverQueue.songs[0]);
       }
     }
 
     // إيقاف
     if (message.content === "!stop") {
-      queue = [];
+      const serverQueue = queue.get(message.guild.id);
+      if (!serverQueue) return message.reply("❌ ما فيه شيء يشتغل");
+
+      serverQueue.songs = [];
       player.stop();
+      serverQueue.connection.destroy();
+      queue.delete(message.guild.id);
+
       message.reply("⏹ تم إيقاف الموسيقى");
     }
 
     // تخطي
     if (message.content === "!skip") {
+      const serverQueue = queue.get(message.guild.id);
+      if (!serverQueue) return message.reply("❌ ما فيه شيء يشتغل");
+
       player.stop();
       message.reply("⏭ تم التخطي");
     }
+
   });
 
 };
