@@ -1,7 +1,7 @@
 {
   "name": "n5bh7",
   "version": "1.0.0",
-  "description": "Professional Discord Voice Bot",
+  "description": "Clean Discord Voice & Music Bot",
   "main": "index.js",
   "type": "commonjs",
   "engines": {
