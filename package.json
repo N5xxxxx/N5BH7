@@ -1,7 +1,7 @@
 {
   "name": "n5bh7",
   "version": "1.0.0",
-  "description": "Stable 24/7 Discord Voice & Music Bot",
+  "description": "Professional 24/7 Discord AI Bot",
   "main": "index.js",
   "type": "commonjs",
   "engines": {
@@ -14,7 +14,6 @@
     "discord.js": "^14.14.1",
     "@discordjs/voice": "^0.16.0",
     "libsodium-wrappers": "^0.7.13",
-    "yt-search": "^2.10.4",
-    "ytdl-core": "^4.11.5"
+    "openai": "^4.52.0"
   }
 }
