@@ -2,7 +2,8 @@ const {
   createAudioPlayer,
   createAudioResource,
   getVoiceConnection,
-  AudioPlayerStatus
+  AudioPlayerStatus,
+  StreamType
 } = require("@discordjs/voice");
 
 const ytdl = require("ytdl-core");
@@ -11,38 +12,47 @@ const yts = require("yt-search");
 module.exports = (client) => {
 
   const player = createAudioPlayer();
-  const queue = [];
+  let queue = [];
+  let isPlaying = false;
 
-  async function playNext(guild) {
-    if (queue.length === 0) return;
-
-    const song = queue.shift();
-
+  async function playSong(guild, song) {
     try {
+      const connection = getVoiceConnection(guild.id);
+      if (!connection) {
+        console.log("❌ No voice connection");
+        return;
+      }
+
       const stream = ytdl(song.url, {
         filter: "audioonly",
         quality: "highestaudio",
         highWaterMark: 1 << 25
       });
 
-      const resource = createAudioResource(stream);
-
-      const connection = getVoiceConnection(guild.id);
-      if (!connection) return;
+      const resource = createAudioResource(stream, {
+        inputType: StreamType.Arbitrary
+      });
 
       connection.subscribe(player);
       player.play(resource);
 
-      console.log("▶️ Playing:", song.title);
+      isPlaying = true;
+
+      console.log("▶️ Now Playing:", song.title);
 
     } catch (err) {
-      console.error("Music Error:", err);
+      console.error("🔥 Play Error:", err);
+      isPlaying = false;
     }
   }
 
   player.on(AudioPlayerStatus.Idle, () => {
-    const guild = client.guilds.cache.first();
-    if (guild) playNext(guild);
+    isPlaying = false;
+
+    if (queue.length > 0) {
+      const guild = client.guilds.cache.first();
+      playSong(guild, queue.shift());
+    }
   });
 
   client.on("messageCreate", async (message) => {
@@ -60,22 +70,25 @@ module.exports = (client) => {
       if (!video)
         return message.reply("❌ ما لقيت نتيجة");
 
-      queue.push({
+      const song = {
         title: video.title,
         url: video.url
-      });
+      };
 
-      message.reply(`🎵 تمت الإضافة: ${video.title}`);
-
-      if (player.state.status !== AudioPlayerStatus.Playing) {
-        playNext(message.guild);
+      if (!isPlaying) {
+        await playSong(message.guild, song);
+        message.reply(`▶️ تم التشغيل: **${video.title}**`);
+      } else {
+        queue.push(song);
+        message.reply(`🎵 تمت الإضافة للطابور: **${video.title}**`);
       }
     }
 
     if (message.content === "!stop") {
-      queue.length = 0;
+      queue = [];
       player.stop();
-      message.reply("⏹ تم الإيقاف");
+      isPlaying = false;
+      message.reply("⏹ تم إيقاف الموسيقى");
     }
 
     if (message.content === "!skip") {
