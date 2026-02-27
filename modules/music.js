@@ -7,8 +7,8 @@ const {
   NoSubscriberBehavior
 } = require("@discordjs/voice");
 
+const ytdl = require("ytdl-core");
 const yts = require("yt-search");
-const play = require("play-dl");
 
 module.exports = (client) => {
 
@@ -23,9 +23,12 @@ module.exports = (client) => {
     if (!song) return;
 
     try {
-      const stream = await play.stream(song.url);
-      const resource = createAudioResource(stream.stream);
+      const stream = ytdl(song.url, {
+        filter: "audioonly",
+        highWaterMark: 1 << 25
+      });
 
+      const resource = createAudioResource(stream);
       player.play(resource);
       serverQueue.connection.subscribe(player);
 
@@ -59,8 +62,6 @@ module.exports = (client) => {
         return message.reply("❌ ادخل روم صوتي أول");
 
       const query = message.content.slice(5).trim();
-
-      // 🔥 نبحث باستخدام yt-search
       const result = await yts(query);
       const video = result.videos[0];
 
