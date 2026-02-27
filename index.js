@@ -1,7 +1,7 @@
 const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
 const { joinVoiceChannel, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
 
-const VOICE_CHANNEL_ID = "1442249904096284802";
+const VOICE_CHANNEL_ID = "1401074295022817381";
 
 const client = new Client({
     intents: [
