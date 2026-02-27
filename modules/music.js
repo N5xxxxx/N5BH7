@@ -13,18 +13,23 @@ const yts = require("yt-search");
 module.exports = (client) => {
 
   const player = createAudioPlayer({
-    behaviors: { noSubscriber: NoSubscriberBehavior.Pause }
+    behaviors: {
+      noSubscriber: NoSubscriberBehavior.Play
+    }
   });
 
   const queue = new Map();
 
   async function playSong(guild, song) {
-    const serverQueue = queue.get(guild.id);
     if (!song) return;
+
+    const serverQueue = queue.get(guild.id);
+    if (!serverQueue) return;
 
     try {
       const stream = ytdl(song.url, {
         filter: "audioonly",
+        quality: "highestaudio",
         highWaterMark: 1 << 25
       });
 
@@ -32,10 +37,10 @@ module.exports = (client) => {
       player.play(resource);
       serverQueue.connection.subscribe(player);
 
-      console.log("▶️ Playing:", song.title);
+      console.log("▶️ Now Playing:", song.title);
 
-    } catch (err) {
-      console.error("PLAY ERROR:", err);
+    } catch (error) {
+      console.error("YTDL ERROR:", error);
     }
   }
 
@@ -62,11 +67,17 @@ module.exports = (client) => {
         return message.reply("❌ ادخل روم صوتي أول");
 
       const query = message.content.slice(5).trim();
+      if (!query)
+        return message.reply("❌ اكتب اسم الأغنية");
+
       const result = await yts(query);
       const video = result.videos[0];
 
-      if (!video || !video.url)
+      if (!video)
         return message.reply("❌ ما لقيت نتيجة");
+
+      if (!video.url)
+        return message.reply("❌ الرابط غير صالح");
 
       const song = {
         title: video.title,
@@ -80,7 +91,7 @@ module.exports = (client) => {
         connection = joinVoiceChannel({
           channelId: voiceChannel.id,
           guildId: message.guild.id,
-          adapterCreator: message.guild.voiceAdapterCreator,
+          adapterCreator: message.guild.voiceAdapterCreator
         });
       }
 
@@ -101,6 +112,11 @@ module.exports = (client) => {
       }
     }
 
+    if (message.content === "!skip") {
+      player.stop();
+      message.reply("⏭ تم التخطي");
+    }
+
     if (message.content === "!stop") {
       const serverQueue = queue.get(message.guild.id);
       if (!serverQueue) return;
@@ -109,12 +125,5 @@ module.exports = (client) => {
       player.stop();
       message.reply("⏹ تم الإيقاف");
     }
-
-    if (message.content === "!skip") {
-      player.stop();
-      message.reply("⏭ تم التخطي");
-    }
-
   });
-
 };
