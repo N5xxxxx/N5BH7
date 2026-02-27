@@ -1,6 +1,7 @@
 const { joinVoiceChannel, getVoiceConnection } = require("@discordjs/voice");
 const { ChannelType } = require("discord.js");
 
+// عدلها لو غيرت الروم أو السيرفر
 const GUILD_ID = "1367976354104086629";
 const VOICE_CHANNEL_ID = "1401074295022817381";
 
@@ -18,6 +19,7 @@ module.exports = (client) => {
         return console.log("❌ Voice channel invalid");
       }
 
+      // يمنع إعادة الاتصال إذا كان متصل
       const existing = getVoiceConnection(guild.id);
       if (existing) {
         console.log("✅ Already connected");
