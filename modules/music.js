@@ -21,10 +21,8 @@ module.exports = (client) => {
   const queue = new Map();
 
   async function playSong(guild, song) {
-    if (!song) return;
-
     const serverQueue = queue.get(guild.id);
-    if (!serverQueue) return;
+    if (!song || !serverQueue) return;
 
     try {
       const stream = ytdl(song.url, {
@@ -39,8 +37,8 @@ module.exports = (client) => {
 
       console.log("▶️ Now Playing:", song.title);
 
-    } catch (error) {
-      console.error("YTDL ERROR:", error);
+    } catch (err) {
+      console.error("YTDL ERROR:", err);
     }
   }
 
@@ -67,17 +65,11 @@ module.exports = (client) => {
         return message.reply("❌ ادخل روم صوتي أول");
 
       const query = message.content.slice(5).trim();
-      if (!query)
-        return message.reply("❌ اكتب اسم الأغنية");
-
       const result = await yts(query);
       const video = result.videos[0];
 
-      if (!video)
+      if (!video || !video.url)
         return message.reply("❌ ما لقيت نتيجة");
-
-      if (!video.url)
-        return message.reply("❌ الرابط غير صالح");
 
       const song = {
         title: video.title,
@@ -126,4 +118,5 @@ module.exports = (client) => {
       message.reply("⏹ تم الإيقاف");
     }
   });
+
 };
