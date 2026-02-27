@@ -5,14 +5,12 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.MessageContent
   ]
 });
 
+// استدعاء الموديولات
 require("./modules/voice")(client);
 require("./modules/music")(client);
-require("./modules/ai")(client);
-require("./modules/protection")(client);
 
 client.login(process.env.TOKEN);
