@@ -4,8 +4,8 @@ const {
   VoiceConnectionStatus
 } = require("@discordjs/voice");
 
-const GUILD_ID = "حط_ايدي_السيرفر";
-const VOICE_CHANNEL_ID = "حط_ايدي_الروم";
+const GUILD_ID = "1367976354104086629";
+const VOICE_CHANNEL_ID = "1401074295022817381";
 
 module.exports = (client) => {
 
