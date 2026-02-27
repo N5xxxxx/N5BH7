@@ -1,10 +1,8 @@
 const {
   createAudioPlayer,
   createAudioResource,
-  joinVoiceChannel,
   getVoiceConnection,
-  AudioPlayerStatus,
-  NoSubscriberBehavior
+  AudioPlayerStatus
 } = require("@discordjs/voice");
 
 const ytdl = require("ytdl-core");
@@ -12,17 +10,13 @@ const yts = require("yt-search");
 
 module.exports = (client) => {
 
-  const player = createAudioPlayer({
-    behaviors: {
-      noSubscriber: NoSubscriberBehavior.Play
-    }
-  });
+  const player = createAudioPlayer();
+  const queue = [];
 
-  const queue = new Map();
+  async function playNext(guild) {
+    if (queue.length === 0) return;
 
-  async function playSong(guild, song) {
-    const serverQueue = queue.get(guild.id);
-    if (!song || !serverQueue) return;
+    const song = queue.shift();
 
     try {
       const stream = ytdl(song.url, {
@@ -32,26 +26,23 @@ module.exports = (client) => {
       });
 
       const resource = createAudioResource(stream);
-      player.play(resource);
-      serverQueue.connection.subscribe(player);
 
-      console.log("▶️ Now Playing:", song.title);
+      const connection = getVoiceConnection(guild.id);
+      if (!connection) return;
+
+      connection.subscribe(player);
+      player.play(resource);
+
+      console.log("▶️ Playing:", song.title);
 
     } catch (err) {
-      console.error("YTDL ERROR:", err);
+      console.error("Music Error:", err);
     }
   }
 
   player.on(AudioPlayerStatus.Idle, () => {
-    const guildId = [...queue.keys()][0];
-    if (!guildId) return;
-
-    const serverQueue = queue.get(guildId);
-    serverQueue.songs.shift();
-
-    if (serverQueue.songs.length > 0) {
-      playSong(client.guilds.cache.get(guildId), serverQueue.songs[0]);
-    }
+    const guild = client.guilds.cache.first();
+    if (guild) playNext(guild);
   });
 
   client.on("messageCreate", async (message) => {
@@ -60,48 +51,31 @@ module.exports = (client) => {
 
     if (message.content.startsWith("!mus ")) {
 
-      const voiceChannel = message.member.voice.channel;
-      if (!voiceChannel)
-        return message.reply("❌ ادخل روم صوتي أول");
-
       const query = message.content.slice(5).trim();
+      if (!query) return message.reply("❌ اكتب اسم الأغنية");
+
       const result = await yts(query);
       const video = result.videos[0];
 
-      if (!video || !video.url)
+      if (!video)
         return message.reply("❌ ما لقيت نتيجة");
 
-      const song = {
+      queue.push({
         title: video.title,
         url: video.url
-      };
+      });
 
-      let serverQueue = queue.get(message.guild.id);
-      let connection = getVoiceConnection(message.guild.id);
+      message.reply(`🎵 تمت الإضافة: ${video.title}`);
 
-      if (!connection) {
-        connection = joinVoiceChannel({
-          channelId: voiceChannel.id,
-          guildId: message.guild.id,
-          adapterCreator: message.guild.voiceAdapterCreator
-        });
+      if (player.state.status !== AudioPlayerStatus.Playing) {
+        playNext(message.guild);
       }
+    }
 
-      if (!serverQueue) {
-        serverQueue = {
-          connection,
-          songs: []
-        };
-        queue.set(message.guild.id, serverQueue);
-      }
-
-      serverQueue.songs.push(song);
-
-      message.reply(`🎵 تمت الإضافة: ${song.title}`);
-
-      if (serverQueue.songs.length === 1) {
-        playSong(message.guild, song);
-      }
+    if (message.content === "!stop") {
+      queue.length = 0;
+      player.stop();
+      message.reply("⏹ تم الإيقاف");
     }
 
     if (message.content === "!skip") {
@@ -109,14 +83,6 @@ module.exports = (client) => {
       message.reply("⏭ تم التخطي");
     }
 
-    if (message.content === "!stop") {
-      const serverQueue = queue.get(message.guild.id);
-      if (!serverQueue) return;
-
-      serverQueue.songs = [];
-      player.stop();
-      message.reply("⏹ تم الإيقاف");
-    }
   });
 
 };
