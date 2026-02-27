@@ -12,24 +12,23 @@ module.exports = (client) => {
 
   const player = createAudioPlayer();
   let queue = [];
-  let volume = 0.5;
-  let boundGuildId = null;
+  let currentGuildId = null;
 
-  // ربط المشغل بالاتصال الصوتي الموجود (من voice.js)
-  client.on("clientReady", () => {
+  // لما البوت يجهز، اربط المشغل بالاتصال الصوتي
+  client.once("clientReady", () => {
     const guild = client.guilds.cache.first();
     if (!guild) return;
 
     const connection = getVoiceConnection(guild.id);
     if (connection) {
       connection.subscribe(player);
-      boundGuildId = guild.id;
+      currentGuildId = guild.id;
       console.log("🎵 Music system ready");
     }
   });
 
   async function playNext() {
-    if (!boundGuildId) return;
+    if (!currentGuildId) return;
     if (queue.length === 0) return;
 
     const song = queue.shift();
@@ -41,10 +40,9 @@ module.exports = (client) => {
         highWaterMark: 1 << 25
       });
 
-      const resource = createAudioResource(stream, { inlineVolume: true });
-      resource.volume.setVolume(volume);
-
+      const resource = createAudioResource(stream);
       player.play(resource);
+
       console.log(`▶️ Now playing: ${song.title}`);
 
     } catch (err) {
@@ -53,7 +51,6 @@ module.exports = (client) => {
     }
   }
 
-  // إذا خلصت الأغنية شغّل اللي بعدها
   player.on(AudioPlayerStatus.Idle, () => {
     playNext();
   });
@@ -63,62 +60,43 @@ module.exports = (client) => {
     playNext();
   });
 
-  // أمر تشغيل
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
     if (!message.guild) return;
 
-    if (!message.content.startsWith("!mus ")) return;
+    // تشغيل
+    if (message.content.startsWith("!mus ")) {
+      const query = message.content.slice(5).trim();
+      if (!query) return message.reply("❌ اكتب اسم الأغنية");
 
-    const query = message.content.slice(5).trim();
-    if (!query) return message.reply("❌ اكتب اسم الأغنية بعد !mus");
-
-    try {
       const search = await ytSearch(query);
       const video = search.videos[0];
 
-      if (!video) {
-        return message.reply("❌ ما لقيت الأغنية");
-      }
+      if (!video) return message.reply("❌ ما لقيت نتيجة");
 
       queue.push({
         title: video.title,
         url: video.url
       });
 
-      message.reply(`🎶 تمت الإضافة للطابور: **${video.title}**`);
+      message.reply(`🎶 تمت الإضافة: **${video.title}**`);
 
       if (player.state.status !== AudioPlayerStatus.Playing) {
         playNext();
       }
-
-    } catch (err) {
-      console.error("Search Error:", err);
-      message.reply("⚠️ صار خطأ أثناء البحث");
     }
-  });
 
-  // أوامر التحكم
-  client.on("messageCreate", async (message) => {
-    if (message.author.bot) return;
+    // إيقاف
+    if (message.content === "!stop") {
+      queue = [];
+      player.stop();
+      message.reply("⏹ تم إيقاف الموسيقى");
+    }
 
-    switch (message.content) {
-      case "!stop":
-        queue = [];
-        player.stop();
-        return message.reply("⏹ تم إيقاف الموسيقى");
-
-      case "!skip":
-        player.stop();
-        return message.reply("⏭ تم التخطي");
-
-      case "!volup":
-        volume = Math.min(volume + 0.1, 2);
-        return message.reply(`🔊 مستوى الصوت: ${Math.round(volume * 100)}%`);
-
-      case "!voldown":
-        volume = Math.max(volume - 0.1, 0);
-        return message.reply(`🔉 مستوى الصوت: ${Math.round(volume * 100)}%`);
+    // تخطي
+    if (message.content === "!skip") {
+      player.stop();
+      message.reply("⏭ تم التخطي");
     }
   });
 
