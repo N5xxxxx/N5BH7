@@ -5,11 +5,13 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.DirectMessages
   ]
 });
 
 require("./modules/voice")(client);
-require("./modules/music")(client);
+require("./modules/ai")(client);
+require("./modules/protection")(client);
 
 client.login(process.env.TOKEN);
