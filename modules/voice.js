@@ -1,32 +1,26 @@
-const { joinVoiceChannel, getVoiceConnection } = require("@discordjs/voice");
-const { ChannelType } = require("discord.js");
+const { 
+  joinVoiceChannel, 
+  getVoiceConnection, 
+  VoiceConnectionStatus,
+  entersState 
+} = require('@discordjs/voice');
 
-// عدلها لو غيرت الروم أو السيرفر
 const GUILD_ID = "1367976354104086629";
 const VOICE_CHANNEL_ID = "1401074295022817381";
 
 module.exports = (client) => {
 
-  client.once("clientReady", async () => {
-    console.log(`🔥 ${client.user.tag} is online`);
-
+  async function connect() {
     try {
       const guild = await client.guilds.fetch(GUILD_ID);
-      if (!guild) return console.log("❌ Guild not found");
-
       const channel = await guild.channels.fetch(VOICE_CHANNEL_ID);
-      if (!channel || channel.type !== ChannelType.GuildVoice) {
-        return console.log("❌ Voice channel invalid");
-      }
 
-      // يمنع إعادة الاتصال إذا كان متصل
+      if (!channel) return;
+
       const existing = getVoiceConnection(guild.id);
-      if (existing) {
-        console.log("✅ Already connected");
-        return;
-      }
+      if (existing) return;
 
-      joinVoiceChannel({
+      const connection = joinVoiceChannel({
         channelId: channel.id,
         guildId: guild.id,
         adapterCreator: guild.voiceAdapterCreator,
@@ -35,8 +29,33 @@ module.exports = (client) => {
 
       console.log("🎧 Connected to voice channel");
 
+      connection.on(VoiceConnectionStatus.Disconnected, async () => {
+        console.log("⚠️ Disconnected... Reconnecting");
+        try {
+          await entersState(connection, VoiceConnectionStatus.Connecting, 5000);
+        } catch {
+          connection.destroy();
+          setTimeout(connect, 3000);
+        }
+      });
+
     } catch (err) {
-      console.error("Voice Error:", err);
+      console.error("Voice error:", err);
+    }
+  }
+
+  // أول ما يشتغل
+  client.once("clientReady", () => {
+    connect();
+  });
+
+  // لو أحد نقله أو طرده
+  client.on("voiceStateUpdate", (oldState, newState) => {
+    if (!client.user) return;
+
+    if (oldState.id === client.user.id && !newState.channelId) {
+      console.log("🚨 Bot was kicked. Rejoining...");
+      setTimeout(connect, 2000);
     }
   });
 
