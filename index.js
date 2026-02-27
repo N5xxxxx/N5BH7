@@ -10,7 +10,6 @@ const client = new Client({
   ]
 });
 
-// تحميل الأنظمة
 require("./modules/voice")(client);
 require("./modules/music")(client);
 require("./modules/ai")(client);
