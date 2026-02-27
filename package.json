@@ -1,18 +1,20 @@
-const { Client, GatewayIntentBits } = require("discord.js");
-
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.DirectMessages
-  ]
-});
-
-require("./modules/voice")(client);
-require("./modules/music")(client);
-require("./modules/ai")(client);
-require("./modules/protection")(client);
-
-client.login(process.env.TOKEN);
+{
+  "name": "n5bh7",
+  "version": "1.0.0",
+  "description": "Professional Discord Voice Bot",
+  "main": "index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "@discordjs/voice": "^0.16.0",
+    "libsodium-wrappers": "^0.7.13",
+    "yt-search": "^2.10.4",
+    "ytdl-core": "^4.11.5"
+  }
+}
