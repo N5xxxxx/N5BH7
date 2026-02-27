@@ -6,14 +6,13 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.DirectMessages
   ]
 });
 
-// تحميل الأنظمة
 require("./modules/voice")(client);
 require("./modules/music")(client);
+require("./modules/ai")(client);
 require("./modules/protection")(client);
-// require("./modules/ai")(client); // بنفعله لاحقاً
 
 client.login(process.env.TOKEN);
