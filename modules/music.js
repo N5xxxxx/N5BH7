@@ -7,6 +7,7 @@ const {
   NoSubscriberBehavior
 } = require("@discordjs/voice");
 
+const yts = require("yt-search");
 const play = require("play-dl");
 
 module.exports = (client) => {
@@ -19,12 +20,7 @@ module.exports = (client) => {
 
   async function playSong(guild, song) {
     const serverQueue = queue.get(guild.id);
-
-    if (!song) {
-      player.stop();
-      serverQueue.songs = [];
-      return;
-    }
+    if (!song) return;
 
     try {
       const stream = await play.stream(song.url);
@@ -33,12 +29,10 @@ module.exports = (client) => {
       player.play(resource);
       serverQueue.connection.subscribe(player);
 
-      console.log(`▶️ Now Playing: ${song.title}`);
+      console.log("▶️ Playing:", song.title);
 
-    } catch (error) {
-      console.error("Play Error:", error);
-      serverQueue.songs.shift();
-      playSong(guild, serverQueue.songs[0]);
+    } catch (err) {
+      console.error("PLAY ERROR:", err);
     }
   }
 
@@ -48,7 +42,10 @@ module.exports = (client) => {
 
     const serverQueue = queue.get(guildId);
     serverQueue.songs.shift();
-    playSong(client.guilds.cache.get(guildId), serverQueue.songs[0]);
+
+    if (serverQueue.songs.length > 0) {
+      playSong(client.guilds.cache.get(guildId), serverQueue.songs[0]);
+    }
   });
 
   client.on("messageCreate", async (message) => {
@@ -62,23 +59,17 @@ module.exports = (client) => {
         return message.reply("❌ ادخل روم صوتي أول");
 
       const query = message.content.slice(5).trim();
-      if (!query)
-        return message.reply("❌ اكتب اسم الأغنية");
 
-      let results;
+      // 🔥 نبحث باستخدام yt-search
+      const result = await yts(query);
+      const video = result.videos[0];
 
-      try {
-        results = await play.search(query, { source: { youtube: "video" }, limit: 1 });
-      } catch (err) {
-        return message.reply("❌ فشل البحث");
-      }
-
-      if (!results || results.length === 0 || !results[0].url)
-        return message.reply("❌ ما لقيت نتيجة صالحة");
+      if (!video || !video.url)
+        return message.reply("❌ ما لقيت نتيجة");
 
       const song = {
-        title: results[0].title,
-        url: results[0].url
+        title: video.title,
+        url: video.url
       };
 
       let serverQueue = queue.get(message.guild.id);
@@ -95,14 +86,14 @@ module.exports = (client) => {
       if (!serverQueue) {
         serverQueue = {
           connection,
-          songs: [],
+          songs: []
         };
         queue.set(message.guild.id, serverQueue);
       }
 
       serverQueue.songs.push(song);
 
-      message.reply(`🎵 تمت الإضافة: **${song.title}**`);
+      message.reply(`🎵 تمت الإضافة: ${song.title}`);
 
       if (serverQueue.songs.length === 1) {
         playSong(message.guild, song);
@@ -111,8 +102,7 @@ module.exports = (client) => {
 
     if (message.content === "!stop") {
       const serverQueue = queue.get(message.guild.id);
-      if (!serverQueue)
-        return message.reply("❌ ما فيه شيء يشتغل");
+      if (!serverQueue) return;
 
       serverQueue.songs = [];
       player.stop();
@@ -120,10 +110,6 @@ module.exports = (client) => {
     }
 
     if (message.content === "!skip") {
-      const serverQueue = queue.get(message.guild.id);
-      if (!serverQueue)
-        return message.reply("❌ ما فيه شيء يشتغل");
-
       player.stop();
       message.reply("⏭ تم التخطي");
     }
