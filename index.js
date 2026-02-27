@@ -1,21 +1,19 @@
-{
-  "name": "n5bh7",
-  "version": "1.0.0",
-  "description": "Professional Discord Voice, Music & AI Bot",
-  "main": "index.js",
-  "type": "commonjs",
-  "engines": {
-    "node": "20.x"
-  },
-  "scripts": {
-    "start": "node index.js"
-  },
-  "dependencies": {
-    "discord.js": "^14.14.1",
-    "@discordjs/voice": "^0.16.0",
-    "play-dl": "^1.9.7",
-    "yt-search": "^2.10.4",
-    "openai": "^4.52.0",
-    "libsodium-wrappers": "^0.7.13"
-  }
-}
+const { Client, GatewayIntentBits } = require("discord.js");
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
+  ]
+});
+
+// تحميل الأنظمة
+require("./modules/voice")(client);
+require("./modules/music")(client);
+require("./modules/protection")(client);
+// require("./modules/ai")(client); // بنفعله لاحقاً
+
+client.login(process.env.TOKEN);
