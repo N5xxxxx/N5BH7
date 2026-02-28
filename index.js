@@ -5,26 +5,28 @@ const express = require("express");
 const app = express();
 
 app.get("/", (req, res) => {
-  res.send("Bot is running");
+  res.send("Bot running");
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Web server is running");
-});
+app.listen(process.env.PORT || 3000);
 
 const { Client, GatewayIntentBits } = require("discord.js");
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
 client.once("ready", () => {
-  console.log("BOT IS ONLINE");
+  console.log("🛡️ BOT IS ONLINE");
 });
 
-// ❌ عطلهم مؤقتًا
-// require("./modules/voice")(client);
-// require("./modules/ai")(client);
-// require("./modules/protection")(client);
+// 🔥 تفعيل الحماية
+require("./modules/protection")(client);
 
 client.login(process.env.TOKEN);
