@@ -1,3 +1,6 @@
+process.on("unhandledRejection", (err) => console.error("UNHANDLED:", err));
+process.on("uncaughtException", (err) => console.error("UNCAUGHT:", err));
+
 const { Client, GatewayIntentBits } = require("discord.js");
 
 const client = new Client({
