@@ -15,23 +15,16 @@ app.listen(process.env.PORT || 3000, () => {
 const { Client, GatewayIntentBits } = require("discord.js");
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildModeration,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.DirectMessages
-  ]
+  intents: [GatewayIntentBits.Guilds]
 });
 
 client.once("ready", () => {
   console.log("BOT IS ONLINE");
 });
 
-require("./modules/voice")(client);
-require("./modules/ai")(client);
-require("./modules/protection")(client);
+// ❌ عطلهم مؤقتًا
+// require("./modules/voice")(client);
+// require("./modules/ai")(client);
+// require("./modules/protection")(client);
 
 client.login(process.env.TOKEN);
