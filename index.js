@@ -4,42 +4,36 @@ process.on("uncaughtException", console.error);
 const express = require("express");
 const app = express();
 
+/* ===========================
+   🌐 WEB SERVER (مهم للاستضافة)
+=========================== */
+
 app.get("/", (req, res) => {
-  res.send("Bot running");
+  res.send("Bot is running");
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("🌐 Web server is running");
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🌐 Web server running on port ${PORT}`);
 });
+
+/* ===========================
+   🤖 DISCORD BOT
+=========================== */
 
 const { Client, GatewayIntentBits } = require("discord.js");
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildModeration,
-    GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ]
 });
 
 client.once("ready", () => {
-  console.log(`🛡️ BOT ONLINE AS ${client.user.tag}`);
+  console.log(`🟢 BOT ONLINE AS ${client.user.tag}`);
 });
-
-/* ===========================
-   🔊 VOICE SYSTEM
-=========================== */
-
-require("./modules/voice")(client);
-
-/* ===========================
-   🛡️ PROTECTION SYSTEM
-=========================== */
-
-require("./modules/protection")(client);
 
 /* ===========================
    🔐 LOGIN
