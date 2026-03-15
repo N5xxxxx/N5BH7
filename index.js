@@ -75,7 +75,7 @@ client.on("interactionCreate", async interaction => {
       await user.send(`${message}\n\n<@${user.id}>`);
 
       await interaction.reply({
-        content: "وصلت يا بعد الدنيا",
+        content: "The Send Is Done",
         ephemeral: true
       });
 
