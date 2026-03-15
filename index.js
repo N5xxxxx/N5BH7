@@ -75,14 +75,14 @@ client.on("interactionCreate", async interaction => {
       await user.send(`${message}\n\n<@${user.id}>`);
 
       await interaction.reply({
-        content: "✅ تم ارسال الرسالة",
+        content: "وصلت يا بعد الدنيا",
         ephemeral: true
       });
 
     } catch {
 
       await interaction.reply({
-        content: "❌ ما قدرت ارسل له خاص",
+        content: " ما قدرت ارسل له خاص",
         ephemeral: true
       });
 
