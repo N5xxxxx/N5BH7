@@ -246,7 +246,13 @@ const target = interaction.options.getMember("user");
 const level = interaction.options.getInteger("level");
 const reason = interaction.options.getString("reason");
 
-warnings.set(target.id, level);
+warnings.set(target.id,{
+level:level,
+reason:reason,
+moderator:user.id,
+time:Date.now(),
+channel:interaction.channel.id
+});
 
 for(const role of Object.values(WARN_ROLES)){
 if(target.roles.cache.has(role)){
@@ -273,9 +279,12 @@ const embed = new EmbedBuilder()
 
 .addFields(
 {name:"👤 المستخدم",value:`<@${target.id}>`,inline:true},
+{name:"🆔 ID",value:target.id,inline:true},
 {name:"🚨 المستوى",value:`Warn ${level}`,inline:true},
 {name:"⚠ السبب",value:reason},
-{name:"🛡 المشرف",value:`<@${user.id}>`}
+{name:"🛡 المشرف",value:`<@${user.id}>`,inline:true},
+{name:"📍 الروم",value:`<#${interaction.channel.id}>`,inline:true},
+{name:"🖥 السيرفر",value:interaction.guild.name,inline:true}
 )
 
 .setTimestamp();
@@ -294,7 +303,16 @@ if(interaction.commandName === "warnings"){
 
 const target = interaction.options.getUser("user");
 
-const level = warnings.get(target.id) || 0;
+const data = warnings.get(target.id);
+
+if(!data){
+
+return interaction.reply({
+content:"لا يوجد تحذيرات لهذا المستخدم",
+ephemeral:true
+});
+
+}
 
 const embed = new EmbedBuilder()
 
@@ -302,11 +320,18 @@ const embed = new EmbedBuilder()
 .setTitle("⚠ Warnings List")
 
 .addFields(
-{name:"👤 المستخدم",value:`<@${target.id}>`},
-{name:"📊 المستوى الحالي",value:`Warn ${level}`}
+{name:"👤 المستخدم",value:`<@${target.id}>`,inline:true},
+{name:"🆔 ID",value:target.id,inline:true},
+{name:"🚨 المستوى",value:`Warn ${data.level}`,inline:true},
+{name:"⚠ السبب",value:data.reason},
+{name:"🛡 المشرف",value:`<@${data.moderator}>`,inline:true},
+{name:"📍 الروم",value:`<#${data.channel}>`,inline:true},
+{name:"🕒 وقت التحذير",value:`<t:${Math.floor(data.time/1000)}:F>`}
 )
 
-.setTimestamp();
+.setTimestamp()
+
+.setFooter({text:interaction.guild.name});
 
 interaction.reply({embeds:[embed]});
 
