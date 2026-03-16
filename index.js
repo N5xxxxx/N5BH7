@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ChannelType, SlashCommandBuilder, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
 
 const TOKEN = process.env.TOKEN;
@@ -78,37 +78,51 @@ client.on("interactionCreate", async interaction => {
       await user.send(`${message}\n\n<@${user.id}>`);
 
       await interaction.reply({
-        content: "The Send Is Done",
+        content: "تم إرسال الرسالة بنجاح",
         ephemeral: true
       });
 
       if (logChannel) {
-        logChannel.send(
-`📩 تم استخدام /send
 
-👤 المرسل: <@${interaction.user.id}>
-📨 المستلم: <@${user.id}>
-💬 الرسالة: ${message}
-✅ الحالة: تم الإرسال`
-        );
+        const embed = new EmbedBuilder()
+          .setColor("#2ecc71")
+          .setTitle("📩 تم إرسال رسالة خاصة")
+          .addFields(
+            { name: "👤 المستخدم الذي استخدم الأمر", value: `<@${interaction.user.id}>`, inline: true },
+            { name: "📨 الشخص المستلم", value: `<@${user.id}>`, inline: true },
+            { name: "📊 الحالة", value: "✅ تم الإرسال", inline: true },
+            { name: "💬 محتوى الرسالة", value: message }
+          )
+          .setTimestamp()
+          .setFooter({ text: `ID المستخدم: ${interaction.user.id}` });
+
+        logChannel.send({ embeds: [embed] });
+
       }
 
     } catch {
 
       await interaction.reply({
-        content: " ما قدرت ارسل له خاص",
+        content: "ما قدرت أرسل له خاص",
         ephemeral: true
       });
 
       if (logChannel) {
-        logChannel.send(
-`📩 تم استخدام /send
 
-👤 المرسل: <@${interaction.user.id}>
-📨 المستلم: <@${user.id}>
-💬 الرسالة: ${message}
-❌ الحالة: فشل الإرسال (الخاص مقفل)`
-        );
+        const embed = new EmbedBuilder()
+          .setColor("#e74c3c")
+          .setTitle("📩 فشل إرسال الرسالة الخاصة")
+          .addFields(
+            { name: "👤 المستخدم الذي استخدم الأمر", value: `<@${interaction.user.id}>`, inline: true },
+            { name: "📨 الشخص المستلم", value: `<@${user.id}>`, inline: true },
+            { name: "📊 الحالة", value: "❌ فشل الإرسال (الخاص مغلق)", inline: true },
+            { name: "💬 محتوى الرسالة", value: message }
+          )
+          .setTimestamp()
+          .setFooter({ text: `ID المستخدم: ${interaction.user.id}` });
+
+        logChannel.send({ embeds: [embed] });
+
       }
 
     }
