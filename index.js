@@ -6,9 +6,9 @@ SlashCommandBuilder,
 REST,
 Routes,
 EmbedBuilder
-} = require('discord.js');
+} = require("discord.js");
 
-const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
+const { joinVoiceChannel, getVoiceConnection } = require("@discordjs/voice");
 
 const TOKEN = process.env.TOKEN;
 
@@ -25,7 +25,7 @@ const LOG_CLEARWARN = "1482927958548287499";
 const warnings = new Map();
 
 const client = new Client({
-intents:[
+intents: [
 GatewayIntentBits.Guilds,
 GatewayIntentBits.GuildMembers,
 GatewayIntentBits.GuildVoiceStates
@@ -41,51 +41,91 @@ const commands = [
 new SlashCommandBuilder()
 .setName("send")
 .setDescription("ارسال رسالة بالخاص")
-.addUserOption(o=>o.setName("user").setDescription("الشخص").setRequired(true))
-.addStringOption(o=>o.setName("message").setDescription("الرسالة").setRequired(true)),
+.addUserOption(o =>
+o.setName("user")
+.setDescription("الشخص")
+.setRequired(true)
+)
+.addStringOption(o =>
+o.setName("message")
+.setDescription("الرسالة")
+.setRequired(true)
+),
 
 new SlashCommandBuilder()
 .setName("announce")
 .setDescription("ارسال اعلان")
-.addChannelOption(o=>o.setName("channel").setDescription("الروم").setRequired(true))
-.addStringOption(o=>o.setName("title").setDescription("العنوان"))
-.addStringOption(o=>o.setName("message").setDescription("الرسالة").setRequired(true)),
+.addChannelOption(o =>
+o.setName("channel")
+.setDescription("الروم")
+.addChannelTypes(ChannelType.GuildText)
+.setRequired(true)
+)
+.addStringOption(o =>
+o.setName("title")
+.setDescription("العنوان")
+)
+.addStringOption(o =>
+o.setName("message")
+.setDescription("الرسالة")
+.setRequired(true)
+),
 
 new SlashCommandBuilder()
 .setName("dmall")
 .setDescription("ارسال رسالة لكل السيرفر")
-.addStringOption(o=>o.setName("message").setDescription("الرسالة").setRequired(true)),
+.addStringOption(o =>
+o.setName("message")
+.setDescription("الرسالة")
+.setRequired(true)
+),
 
 new SlashCommandBuilder()
 .setName("warn")
 .setDescription("تحذير عضو")
-.addUserOption(o=>o.setName("user").setDescription("الشخص").setRequired(true))
-.addStringOption(o=>o.setName("reason").setDescription("السبب").setRequired(true)),
+.addUserOption(o =>
+o.setName("user")
+.setDescription("الشخص")
+.setRequired(true)
+)
+.addStringOption(o =>
+o.setName("reason")
+.setDescription("السبب")
+.setRequired(true)
+),
 
 new SlashCommandBuilder()
 .setName("warnings")
 .setDescription("عرض تحذيرات عضو")
-.addUserOption(o=>o.setName("user").setDescription("الشخص").setRequired(true)),
+.addUserOption(o =>
+o.setName("user")
+.setDescription("الشخص")
+.setRequired(true)
+),
 
 new SlashCommandBuilder()
 .setName("clearwarnings")
 .setDescription("مسح التحذيرات")
-.addUserOption(o=>o.setName("user").setDescription("الشخص").setRequired(true))
+.addUserOption(o =>
+o.setName("user")
+.setDescription("الشخص")
+.setRequired(true)
+)
 
-].map(c=>c.toJSON());
+].map(c => c.toJSON());
 
 /*
 REGISTER COMMANDS
 */
 
-const rest = new REST({version:"10"}).setToken(TOKEN);
+const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-client.once("ready", async()=>{
+client.once("clientReady", async () => {
 
 console.log(`✅ Logged in as ${client.user.tag}`);
 
 await rest.put(
-Routes.applicationGuildCommands(client.user.id,GUILD_ID),
+Routes.applicationGuildCommands(client.user.id, GUILD_ID),
 { body: commands }
 );
 
@@ -96,18 +136,20 @@ AUTO JOIN VOICE
 */
 
 const guild = client.guilds.cache.get(GUILD_ID);
-if(!guild) return;
+
+if (!guild) return;
 
 const channel = guild.channels.cache.get(VOICE_CHANNEL_ID);
-if(!channel || channel.type!==ChannelType.GuildVoice) return;
 
-if(!getVoiceConnection(guild.id)){
+if (!channel || channel.type !== ChannelType.GuildVoice) return;
+
+if (!getVoiceConnection(guild.id)) {
 
 joinVoiceChannel({
-channelId:channel.id,
-guildId:guild.id,
-adapterCreator:guild.voiceAdapterCreator,
-selfDeaf:true
+channelId: channel.id,
+guildId: guild.id,
+adapterCreator: guild.voiceAdapterCreator,
+selfDeaf: true
 });
 
 }
@@ -118,17 +160,17 @@ selfDeaf:true
 COMMAND HANDLER
 */
 
-client.on("interactionCreate", async interaction=>{
+client.on("interactionCreate", async interaction => {
 
-if(!interaction.isChatInputCommand()) return;
+if (!interaction.isChatInputCommand()) return;
 
 const user = interaction.user;
 
-function log(channelId,embed){
+function log(channelId, embed) {
 
 const channel = interaction.guild.channels.cache.get(channelId);
 
-if(channel) channel.send({embeds:[embed]});
+if (channel) channel.send({ embeds: [embed] });
 
 }
 
@@ -136,37 +178,37 @@ if(channel) channel.send({embeds:[embed]});
 SEND
 */
 
-if(interaction.commandName==="send"){
+if (interaction.commandName === "send") {
 
 const target = interaction.options.getUser("user");
 const message = interaction.options.getString("message");
 
-try{
+try {
 
 await target.send(`${message}\n\n<@${target.id}>`);
 
 await interaction.reply({
-content:"تم ارسال الرسالة",
-ephemeral:true
+content: "تم ارسال الرسالة",
+ephemeral: true
 });
 
 const embed = new EmbedBuilder()
 .setColor("#2ecc71")
 .setTitle("📩 Send Command")
 .addFields(
-{name:"المرسل",value:`<@${user.id}>`},
-{name:"المستلم",value:`<@${target.id}>`},
-{name:"الرسالة",value:message}
+{ name: "المرسل", value: `<@${user.id}>` },
+{ name: "المستلم", value: `<@${target.id}>` },
+{ name: "الرسالة", value: message }
 )
 .setTimestamp();
 
-log(LOG_SEND,embed);
+log(LOG_SEND, embed);
 
-}catch{
+} catch {
 
 interaction.reply({
-content:"الخاص مقفل",
-ephemeral:true
+content: "الخاص مقفل",
+ephemeral: true
 });
 
 }
@@ -177,45 +219,36 @@ ephemeral:true
 ANNOUNCE
 */
 
-if(interaction.commandName==="announce"){
+if (interaction.commandName === "announce") {
 
 const channel = interaction.options.getChannel("channel");
 const title = interaction.options.getString("title") || "اعلان";
 const message = interaction.options.getString("message");
 
-if(channel.type !== ChannelType.GuildText){
-
-return interaction.reply({
-content:"اختر روم كتابي",
-ephemeral:true
-});
-
-}
-
 const embed = new EmbedBuilder()
 .setColor("#3498db")
 .setTitle(title)
 .setDescription(message)
-.setFooter({text:`بواسطة ${user.tag}`})
+.setFooter({ text: `بواسطة ${user.tag}` })
 .setTimestamp();
 
-channel.send({embeds:[embed]});
+channel.send({ embeds: [embed] });
 
 interaction.reply({
-content:"تم ارسال الاعلان",
-ephemeral:true
+content: "تم ارسال الاعلان",
+ephemeral: true
 });
 
 const logEmbed = new EmbedBuilder()
 .setColor("#3498db")
 .setTitle("📢 Announce")
 .addFields(
-{name:"المرسل",value:`<@${user.id}>`},
-{name:"الروم",value:`${channel}`}
+{ name: "المرسل", value: `<@${user.id}>` },
+{ name: "الروم", value: `${channel}` }
 )
 .setTimestamp();
 
-log(LOG_ANNOUNCE,logEmbed);
+log(LOG_ANNOUNCE, logEmbed);
 
 }
 
@@ -223,24 +256,24 @@ log(LOG_ANNOUNCE,logEmbed);
 DMALL
 */
 
-if(interaction.commandName==="dmall"){
+if (interaction.commandName === "dmall") {
 
 const message = interaction.options.getString("message");
 
 await interaction.reply({
-content:"جاري الارسال...",
-ephemeral:true
+content: "جاري الارسال...",
+ephemeral: true
 });
 
 const members = await interaction.guild.members.fetch();
 
 let count = 0;
 
-for(const member of members.values()){
+for (const member of members.values()) {
 
-if(member.user.bot) continue;
+if (member.user.bot) continue;
 
-await member.send(`${message}\n\n<@${member.id}>`).catch(()=>{});
+await member.send(`${message}\n\n<@${member.id}>`).catch(() => {});
 
 count++;
 
@@ -250,12 +283,12 @@ const embed = new EmbedBuilder()
 .setColor("#9b59b6")
 .setTitle("📬 DM All")
 .addFields(
-{name:"المرسل",value:`<@${user.id}>`},
-{name:"عدد الاعضاء",value:`${count}`}
+{ name: "المرسل", value: `<@${user.id}>` },
+{ name: "عدد الاعضاء", value: `${count}` }
 )
 .setTimestamp();
 
-log(LOG_DMALL,embed);
+log(LOG_DMALL, embed);
 
 }
 
@@ -263,33 +296,33 @@ log(LOG_DMALL,embed);
 WARN
 */
 
-if(interaction.commandName==="warn"){
+if (interaction.commandName === "warn") {
 
 const target = interaction.options.getUser("user");
 const reason = interaction.options.getString("reason");
 
-if(!warnings.has(target.id)){
-warnings.set(target.id,[]);
+if (!warnings.has(target.id)) {
+warnings.set(target.id, []);
 }
 
 warnings.get(target.id).push(reason);
 
 interaction.reply({
-content:`تم تحذير ${target.tag}`,
-ephemeral:true
+content: `تم تحذير ${target.tag}`,
+ephemeral: true
 });
 
 const embed = new EmbedBuilder()
 .setColor("#e67e22")
 .setTitle("⚠️ Warn")
 .addFields(
-{name:"المستخدم",value:`<@${target.id}>`},
-{name:"السبب",value:reason},
-{name:"المشرف",value:`<@${user.id}>`}
+{ name: "المستخدم", value: `<@${target.id}>` },
+{ name: "السبب", value: reason },
+{ name: "المشرف", value: `<@${user.id}>` }
 )
 .setTimestamp();
 
-log(LOG_WARN,embed);
+log(LOG_WARN, embed);
 
 }
 
@@ -297,7 +330,7 @@ log(LOG_WARN,embed);
 WARNINGS
 */
 
-if(interaction.commandName==="warnings"){
+if (interaction.commandName === "warnings") {
 
 const target = interaction.options.getUser("user");
 
@@ -309,9 +342,9 @@ const embed = new EmbedBuilder()
 .setDescription(list.length ? list.join("\n") : "لا يوجد تحذيرات")
 .setTimestamp();
 
-interaction.reply({embeds:[embed]});
+interaction.reply({ embeds: [embed] });
 
-log(LOG_WARNINGS,embed);
+log(LOG_WARNINGS, embed);
 
 }
 
@@ -319,27 +352,27 @@ log(LOG_WARNINGS,embed);
 CLEAR WARNINGS
 */
 
-if(interaction.commandName==="clearwarnings"){
+if (interaction.commandName === "clearwarnings") {
 
 const target = interaction.options.getUser("user");
 
 warnings.delete(target.id);
 
 interaction.reply({
-content:"تم مسح التحذيرات",
-ephemeral:true
+content: "تم مسح التحذيرات",
+ephemeral: true
 });
 
 const embed = new EmbedBuilder()
 .setColor("#2ecc71")
 .setTitle("🧹 Clear Warnings")
 .addFields(
-{name:"المستخدم",value:`<@${target.id}>`},
-{name:"بواسطة",value:`<@${user.id}>`}
+{ name: "المستخدم", value: `<@${target.id}>` },
+{ name: "بواسطة", value: `<@${user.id}>` }
 )
 .setTimestamp();
 
-log(LOG_CLEARWARN,embed);
+log(LOG_CLEARWARN, embed);
 
 }
 
