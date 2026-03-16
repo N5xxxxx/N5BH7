@@ -23,6 +23,17 @@ const LOG_WARNINGS = "1482927612627128516";
 const LOG_DMALL = "1482927730050859080";
 const LOG_CLEARWARN = "1482927958548287499";
 
+/* WARN ROLES */
+
+const WARN_ROLES = {
+1:"1482963105943126108",
+2:"1482963310860042300",
+3:"1482963374605340734",
+4:"1482963614775115837",
+5:"1482963685428433068",
+6:"1482963748267233412"
+};
+
 const warnings = new Map();
 
 /*
@@ -58,6 +69,18 @@ new SlashCommandBuilder()
 .setName("warn")
 .setDescription("تحذير عضو")
 .addUserOption(o=>o.setName("user").setDescription("الشخص").setRequired(true))
+.addIntegerOption(o=>
+o.setName("level")
+.setDescription("رقم الوارن")
+.setRequired(true)
+.addChoices(
+{name:"Warn 1",value:1},
+{name:"Warn 2",value:2},
+{name:"Warn 3",value:3},
+{name:"Warn 4",value:4},
+{name:"Warn 5",value:5},
+{name:"Warn 6",value:6}
+))
 .addStringOption(o=>o.setName("reason").setDescription("السبب").setRequired(true)),
 
 new SlashCommandBuilder()
@@ -214,71 +237,32 @@ ephemeral:true
 }
 
 /*
-DMALL
-*/
-
-if(interaction.commandName === "dmall"){
-
-const message = interaction.options.getString("message");
-
-await interaction.reply({
-content:"جاري ارسال الرسائل...",
-ephemeral:true
-});
-
-const members = await interaction.guild.members.fetch();
-
-let count = 0;
-
-for(const member of members.values()){
-
-if(member.user.bot) continue;
-
-await member.send(`${message}\n\n<@${member.id}>`).catch(()=>{});
-
-count++;
-
-}
-
-const embed = new EmbedBuilder()
-
-.setColor("#9b59b6")
-.setTitle("📬 DMALL Used")
-
-.addFields(
-{name:"👤 المرسل",value:`<@${user.id}>`,inline:true},
-{name:"🆔 ID",value:user.id,inline:true},
-{name:"📊 عدد المستلمين",value:`${count}`,inline:true},
-{name:"💬 الرسالة",value:message}
-)
-
-.setTimestamp()
-
-.setFooter({text:interaction.guild.name});
-
-sendLog(interaction, LOG_DMALL, embed);
-
-}
-
-/*
-WARN
+WARN SYSTEM
 */
 
 if(interaction.commandName === "warn"){
 
-const target = interaction.options.getUser("user");
+const target = interaction.options.getMember("user");
+const level = interaction.options.getInteger("level");
 const reason = interaction.options.getString("reason");
 
-if(!warnings.has(target.id)){
-warnings.set(target.id,[]);
+for(const role of Object.values(WARN_ROLES)){
+if(target.roles.cache.has(role)){
+await target.roles.remove(role).catch(()=>{});
+}
 }
 
-warnings.get(target.id).push(reason);
+const roleId = WARN_ROLES[level];
 
-interaction.reply({
-content:`تم تحذير ${target.tag}`,
-ephemeral:true
-});
+await target.roles.add(roleId).catch(()=>{});
+
+if(level === 4){
+await target.kick(reason).catch(()=>{});
+}
+
+if(level === 6){
+await target.ban({reason}).catch(()=>{});
+}
 
 const embed = new EmbedBuilder()
 
@@ -287,77 +271,16 @@ const embed = new EmbedBuilder()
 
 .addFields(
 {name:"👤 المستخدم",value:`<@${target.id}>`,inline:true},
-{name:"🆔 ID",value:target.id,inline:true},
-{name:"📛 الاسم",value:target.tag,inline:true},
+{name:"🚨 المستوى",value:`Warn ${level}`,inline:true},
 {name:"⚠ السبب",value:reason},
 {name:"🛡 المشرف",value:`<@${user.id}>`}
-)
-
-.setTimestamp()
-
-.setFooter({text:interaction.guild.name});
-
-sendLog(interaction, LOG_WARN, embed);
-
-}
-
-/*
-WARNINGS
-*/
-
-if(interaction.commandName === "warnings"){
-
-const target = interaction.options.getUser("user");
-const list = warnings.get(target.id) || [];
-
-const embed = new EmbedBuilder()
-
-.setColor("#f1c40f")
-.setTitle(`⚠ Warnings List`)
-
-.addFields(
-{name:"👤 المستخدم",value:`<@${target.id}>`},
-{name:"📊 العدد",value:`${list.length}`},
-{name:"📄 القائمة",value:list.length ? list.join("\n") : "لا يوجد"}
 )
 
 .setTimestamp();
 
 interaction.reply({embeds:[embed]});
 
-sendLog(interaction, LOG_WARNINGS, embed);
-
-}
-
-/*
-CLEAR WARNINGS
-*/
-
-if(interaction.commandName === "clearwarnings"){
-
-const target = interaction.options.getUser("user");
-
-warnings.delete(target.id);
-
-interaction.reply({
-content:"تم مسح التحذيرات",
-ephemeral:true
-});
-
-const embed = new EmbedBuilder()
-
-.setColor("#2ecc71")
-.setTitle("🧹 Warnings Cleared")
-
-.addFields(
-{name:"👤 المستخدم",value:`<@${target.id}>`},
-{name:"🆔 ID",value:target.id},
-{name:"🛡 بواسطة",value:`<@${user.id}>`}
-)
-
-.setTimestamp();
-
-sendLog(interaction, LOG_CLEARWARN, embed);
+sendLog(interaction, LOG_WARN, embed);
 
 }
 
