@@ -25,6 +25,10 @@ const LOG_CLEARWARN = "1482927958548287499";
 
 const warnings = new Map();
 
+/*
+CLIENT
+*/
+
 const client = new Client({
 intents:[
 GatewayIntentBits.Guilds,
@@ -37,67 +41,36 @@ GatewayIntentBits.GuildVoiceStates
 COMMANDS
 */
 
-const commandList = [];
+const commands = [
 
-const sendCommand = new SlashCommandBuilder()
+new SlashCommandBuilder()
 .setName("send")
 .setDescription("ارسال رسالة بالخاص")
-.addUserOption(o=>
-o.setName("user")
-.setDescription("الشخص")
-.setRequired(true))
-.addStringOption(o=>
-o.setName("message")
-.setDescription("الرسالة")
-.setRequired(true));
+.addUserOption(o=>o.setName("user").setDescription("الشخص").setRequired(true))
+.addStringOption(o=>o.setName("message").setDescription("الرسالة").setRequired(true)),
 
-commandList.push(sendCommand);
-
-const dmallCommand = new SlashCommandBuilder()
+new SlashCommandBuilder()
 .setName("dmall")
 .setDescription("ارسال رسالة لكل السيرفر")
-.addStringOption(o=>
-o.setName("message")
-.setDescription("الرسالة")
-.setRequired(true));
+.addStringOption(o=>o.setName("message").setDescription("الرسالة").setRequired(true)),
 
-commandList.push(dmallCommand);
-
-const warnCommand = new SlashCommandBuilder()
+new SlashCommandBuilder()
 .setName("warn")
 .setDescription("تحذير عضو")
-.addUserOption(o=>
-o.setName("user")
-.setDescription("الشخص")
-.setRequired(true))
-.addStringOption(o=>
-o.setName("reason")
-.setDescription("السبب")
-.setRequired(true));
+.addUserOption(o=>o.setName("user").setDescription("الشخص").setRequired(true))
+.addStringOption(o=>o.setName("reason").setDescription("السبب").setRequired(true)),
 
-commandList.push(warnCommand);
-
-const warningsCommand = new SlashCommandBuilder()
+new SlashCommandBuilder()
 .setName("warnings")
 .setDescription("عرض تحذيرات عضو")
-.addUserOption(o=>
-o.setName("user")
-.setDescription("الشخص")
-.setRequired(true));
+.addUserOption(o=>o.setName("user").setDescription("الشخص").setRequired(true)),
 
-commandList.push(warningsCommand);
-
-const clearWarningsCommand = new SlashCommandBuilder()
+new SlashCommandBuilder()
 .setName("clearwarnings")
 .setDescription("مسح التحذيرات")
-.addUserOption(o=>
-o.setName("user")
-.setDescription("الشخص")
-.setRequired(true));
+.addUserOption(o=>o.setName("user").setDescription("الشخص").setRequired(true))
 
-commandList.push(clearWarningsCommand);
-
-const commands = commandList.map(cmd => cmd.toJSON());
+].map(c=>c.toJSON());
 
 /*
 REGISTER COMMANDS
@@ -105,13 +78,13 @@ REGISTER COMMANDS
 
 const rest = new REST({version:"10"}).setToken(TOKEN);
 
-client.once("clientReady",async()=>{
+client.once("clientReady", async () => {
 
 console.log(`✅ Logged in as ${client.user.tag}`);
 
 await rest.put(
 Routes.applicationGuildCommands(client.user.id,GUILD_ID),
-{body:commands}
+{ body: commands }
 );
 
 console.log("✅ Commands Registered");
@@ -140,33 +113,37 @@ selfDeaf:true
 });
 
 /*
-COMMAND HANDLER
+LOG FUNCTION
 */
 
-client.on("interactionCreate",async interaction=>{
-
-if(!interaction.isChatInputCommand()) return;
-
-const user = interaction.user;
-
-function log(channelId,embed,button){
+function sendLog(interaction, channelId, embed, row){
 
 const channel = interaction.guild.channels.cache.get(channelId);
 
 if(channel){
 channel.send({
 embeds:[embed],
-components:button ? [button] : []
+components: row ? [row] : []
 });
 }
 
 }
 
 /*
+COMMAND HANDLER
+*/
+
+client.on("interactionCreate", async interaction => {
+
+if(!interaction.isChatInputCommand()) return;
+
+const user = interaction.user;
+
+/*
 SEND
 */
 
-if(interaction.commandName==="send"){
+if(interaction.commandName === "send"){
 
 const target = interaction.options.getUser("user");
 const message = interaction.options.getString("message");
@@ -175,38 +152,55 @@ try{
 
 await target.send(`${message}\n\n<@${target.id}>`);
 
-interaction.reply({
+await interaction.reply({
 content:"تم إرسال الرسالة بنجاح",
 ephemeral:true
 });
 
 const embed = new EmbedBuilder()
+
 .setColor("#2ecc71")
+
 .setAuthor({
-name:"📩 تم استخدام أمر send",
+name:"📩 Send Command Used",
 iconURL:user.displayAvatarURL()
 })
+
 .setThumbnail(target.displayAvatarURL())
+
 .addFields(
+
 {name:"👤 المرسل",value:`<@${user.id}>`,inline:true},
 {name:"🆔 ID المرسل",value:user.id,inline:true},
+
 {name:"📨 المستلم",value:`<@${target.id}>`,inline:true},
 {name:"🆔 ID المستلم",value:target.id,inline:true},
-{name:"💬 محتوى الرسالة",value:message},
-{name:"📊 الحالة",value:"✅ تم الإرسال",inline:true}
-)
-.setTimestamp()
-.setFooter({text:`Server: ${interaction.guild.name}`});
 
-const row = new ActionRowBuilder()
-.addComponents(
+{name:"💬 محتوى الرسالة",value:message},
+
+{name:"📍 الروم",value:`<#${interaction.channel.id}>`,inline:true},
+{name:"🖥 السيرفر",value:interaction.guild.name,inline:true},
+
+{name:"📊 الحالة",value:"✅ تم الإرسال",inline:true}
+
+)
+
+.setTimestamp()
+
+.setFooter({
+text:`Server ID: ${interaction.guild.id}`
+});
+
+const row = new ActionRowBuilder().addComponents(
+
 new ButtonBuilder()
 .setLabel("فتح بروفايل المرسل")
 .setStyle(ButtonStyle.Link)
 .setURL(`https://discord.com/users/${user.id}`)
+
 );
 
-log(LOG_SEND,embed,row);
+sendLog(interaction, LOG_SEND, embed, row);
 
 }catch{
 
@@ -223,7 +217,7 @@ ephemeral:true
 DMALL
 */
 
-if(interaction.commandName==="dmall"){
+if(interaction.commandName === "dmall"){
 
 const message = interaction.options.getString("message");
 
@@ -247,15 +241,22 @@ count++;
 }
 
 const embed = new EmbedBuilder()
-.setColor("#9b59b6")
-.setTitle("📬 DM All")
-.addFields(
-{name:"المرسل",value:`<@${user.id}>`},
-{name:"عدد الاعضاء",value:`${count}`}
-)
-.setTimestamp();
 
-log(LOG_DMALL,embed);
+.setColor("#9b59b6")
+.setTitle("📬 DMALL Used")
+
+.addFields(
+{name:"👤 المرسل",value:`<@${user.id}>`,inline:true},
+{name:"🆔 ID",value:user.id,inline:true},
+{name:"📊 عدد المستلمين",value:`${count}`,inline:true},
+{name:"💬 الرسالة",value:message}
+)
+
+.setTimestamp()
+
+.setFooter({text:interaction.guild.name});
+
+sendLog(interaction, LOG_DMALL, embed);
 
 }
 
@@ -263,7 +264,7 @@ log(LOG_DMALL,embed);
 WARN
 */
 
-if(interaction.commandName==="warn"){
+if(interaction.commandName === "warn"){
 
 const target = interaction.options.getUser("user");
 const reason = interaction.options.getString("reason");
@@ -280,16 +281,23 @@ ephemeral:true
 });
 
 const embed = new EmbedBuilder()
-.setColor("#e67e22")
-.setTitle("⚠️ Warn")
-.addFields(
-{name:"المستخدم",value:`<@${target.id}>`},
-{name:"السبب",value:reason},
-{name:"المشرف",value:`<@${user.id}>`}
-)
-.setTimestamp();
 
-log(LOG_WARN,embed);
+.setColor("#e67e22")
+.setTitle("⚠ Warn Added")
+
+.addFields(
+{name:"👤 المستخدم",value:`<@${target.id}>`,inline:true},
+{name:"🆔 ID",value:target.id,inline:true},
+{name:"📛 الاسم",value:target.tag,inline:true},
+{name:"⚠ السبب",value:reason},
+{name:"🛡 المشرف",value:`<@${user.id}>`}
+)
+
+.setTimestamp()
+
+.setFooter({text:interaction.guild.name});
+
+sendLog(interaction, LOG_WARN, embed);
 
 }
 
@@ -297,21 +305,27 @@ log(LOG_WARN,embed);
 WARNINGS
 */
 
-if(interaction.commandName==="warnings"){
+if(interaction.commandName === "warnings"){
 
 const target = interaction.options.getUser("user");
-
 const list = warnings.get(target.id) || [];
 
 const embed = new EmbedBuilder()
+
 .setColor("#f1c40f")
-.setTitle(`تحذيرات ${target.tag}`)
-.setDescription(list.length ? list.join("\n") : "لا يوجد تحذيرات")
+.setTitle(`⚠ Warnings List`)
+
+.addFields(
+{name:"👤 المستخدم",value:`<@${target.id}>`},
+{name:"📊 العدد",value:`${list.length}`},
+{name:"📄 القائمة",value:list.length ? list.join("\n") : "لا يوجد"}
+)
+
 .setTimestamp();
 
 interaction.reply({embeds:[embed]});
 
-log(LOG_WARNINGS,embed);
+sendLog(interaction, LOG_WARNINGS, embed);
 
 }
 
@@ -319,7 +333,7 @@ log(LOG_WARNINGS,embed);
 CLEAR WARNINGS
 */
 
-if(interaction.commandName==="clearwarnings"){
+if(interaction.commandName === "clearwarnings"){
 
 const target = interaction.options.getUser("user");
 
@@ -331,15 +345,19 @@ ephemeral:true
 });
 
 const embed = new EmbedBuilder()
+
 .setColor("#2ecc71")
-.setTitle("🧹 Clear Warnings")
+.setTitle("🧹 Warnings Cleared")
+
 .addFields(
-{name:"المستخدم",value:`<@${target.id}>`},
-{name:"بواسطة",value:`<@${user.id}>`}
+{name:"👤 المستخدم",value:`<@${target.id}>`},
+{name:"🆔 ID",value:target.id},
+{name:"🛡 بواسطة",value:`<@${user.id}>`}
 )
+
 .setTimestamp();
 
-log(LOG_CLEARWARN,embed);
+sendLog(interaction, LOG_CLEARWARN, embed);
 
 }
 
