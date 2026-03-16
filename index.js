@@ -111,7 +111,6 @@ client.on("interactionCreate", async interaction => {
           );
 
         logChannel.send({
-          content: `📨 **تم استخدام /send**`,
           embeds: [embed],
           components: [row]
         });
@@ -140,7 +139,7 @@ client.on("interactionCreate", async interaction => {
             { name: "📨 المستلم", value: `<@${user.id}>`, inline: true },
             { name: "🆔 ID المستلم", value: user.id, inline: true },
             { name: "💬 محتوى الرسالة", value: message },
-            { name: "📊 الحالة", value: "❌ فشل الإرسال (الخاص مقفل)", inline: true }
+            { name: "📊 الحالة", value: "❌ فشل الإرسال (الخاص مغلق)", inline: true }
           )
           .setTimestamp()
           .setFooter({ text: `Server: ${interaction.guild.name}` });
@@ -154,7 +153,6 @@ client.on("interactionCreate", async interaction => {
           );
 
         logChannel.send({
-          content: `📨 **تم استخدام /send**`,
           embeds: [embed],
           components: [row]
         });
