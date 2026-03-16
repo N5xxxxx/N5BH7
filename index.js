@@ -378,4 +378,41 @@ sendLog(interaction, LOG_CLEARWARN, embed);
 
 });
 
+/*
+WARN ROLE PROTECTION
+*/
+
+client.on("guildMemberUpdate", async (oldMember,newMember)=>{
+
+const data = warnings.get(newMember.id);
+if(!data) return;
+
+const warnRole = WARN_ROLES[data.level];
+if(!warnRole) return;
+
+const hadRole = oldMember.roles.cache.has(warnRole);
+const hasRole = newMember.roles.cache.has(warnRole);
+
+if(hadRole && !hasRole){
+
+const logs = await newMember.guild.fetchAuditLogs({
+limit:1,
+type:25
+}).catch(()=>null);
+
+if(!logs) return;
+
+const entry = logs.entries.first();
+if(!entry) return;
+
+if(entry.executor.id !== client.user.id){
+
+await newMember.roles.add(warnRole).catch(()=>{});
+
+}
+
+}
+
+});
+
 client.login(TOKEN);
