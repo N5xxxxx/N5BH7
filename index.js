@@ -246,6 +246,8 @@ const target = interaction.options.getMember("user");
 const level = interaction.options.getInteger("level");
 const reason = interaction.options.getString("reason");
 
+warnings.set(target.id, level);
+
 for(const role of Object.values(WARN_ROLES)){
 if(target.roles.cache.has(role)){
 await target.roles.remove(role).catch(()=>{});
@@ -281,6 +283,71 @@ const embed = new EmbedBuilder()
 interaction.reply({embeds:[embed]});
 
 sendLog(interaction, LOG_WARN, embed);
+
+}
+
+/*
+WARNINGS
+*/
+
+if(interaction.commandName === "warnings"){
+
+const target = interaction.options.getUser("user");
+
+const level = warnings.get(target.id) || 0;
+
+const embed = new EmbedBuilder()
+
+.setColor("#f1c40f")
+.setTitle("⚠ Warnings List")
+
+.addFields(
+{name:"👤 المستخدم",value:`<@${target.id}>`},
+{name:"📊 المستوى الحالي",value:`Warn ${level}`}
+)
+
+.setTimestamp();
+
+interaction.reply({embeds:[embed]});
+
+sendLog(interaction, LOG_WARNINGS, embed);
+
+}
+
+/*
+CLEAR WARNINGS
+*/
+
+if(interaction.commandName === "clearwarnings"){
+
+const target = interaction.options.getMember("user");
+
+warnings.delete(target.id);
+
+for(const role of Object.values(WARN_ROLES)){
+if(target.roles.cache.has(role)){
+await target.roles.remove(role).catch(()=>{});
+}
+}
+
+interaction.reply({
+content:"تم مسح التحذيرات",
+ephemeral:true
+});
+
+const embed = new EmbedBuilder()
+
+.setColor("#2ecc71")
+.setTitle("🧹 Warnings Cleared")
+
+.addFields(
+{name:"👤 المستخدم",value:`<@${target.id}>`},
+{name:"🛡 بواسطة",value:`<@${user.id}>`}
+)
+
+.setTimestamp();
+
+sendLog(interaction, LOG_CLEARWARN, embed);
 
 }
 
