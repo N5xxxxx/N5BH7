@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ChannelType, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, SlashCommandBuilder, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
 
 const TOKEN = process.env.TOKEN;
@@ -86,17 +86,35 @@ client.on("interactionCreate", async interaction => {
 
         const embed = new EmbedBuilder()
           .setColor("#2ecc71")
-          .setTitle("📩 تم إرسال رسالة خاصة")
+          .setAuthor({
+            name: "📩 تم استخدام أمر /send",
+            iconURL: interaction.user.displayAvatarURL()
+          })
+          .setThumbnail(user.displayAvatarURL())
           .addFields(
-            { name: "👤 المستخدم الذي استخدم الأمر", value: `<@${interaction.user.id}>`, inline: true },
-            { name: "📨 الشخص المستلم", value: `<@${user.id}>`, inline: true },
-            { name: "📊 الحالة", value: "✅ تم الإرسال", inline: true },
-            { name: "💬 محتوى الرسالة", value: message }
+            { name: "👤 المرسل", value: `<@${interaction.user.id}>`, inline: true },
+            { name: "🆔 ID المرسل", value: interaction.user.id, inline: true },
+            { name: "📨 المستلم", value: `<@${user.id}>`, inline: true },
+            { name: "🆔 ID المستلم", value: user.id, inline: true },
+            { name: "💬 محتوى الرسالة", value: message },
+            { name: "📊 الحالة", value: "✅ تم الإرسال", inline: true }
           )
           .setTimestamp()
-          .setFooter({ text: `ID المستخدم: ${interaction.user.id}` });
+          .setFooter({ text: `Server: ${interaction.guild.name}` });
 
-        logChannel.send({ embeds: [embed] });
+        const row = new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setLabel("فتح بروفايل المرسل")
+              .setStyle(ButtonStyle.Link)
+              .setURL(`https://discord.com/users/${interaction.user.id}`)
+          );
+
+        logChannel.send({
+          content: `📨 **تم استخدام /send**`,
+          embeds: [embed],
+          components: [row]
+        });
 
       }
 
@@ -111,17 +129,35 @@ client.on("interactionCreate", async interaction => {
 
         const embed = new EmbedBuilder()
           .setColor("#e74c3c")
-          .setTitle("📩 فشل إرسال الرسالة الخاصة")
+          .setAuthor({
+            name: "📩 فشل استخدام أمر /send",
+            iconURL: interaction.user.displayAvatarURL()
+          })
+          .setThumbnail(user.displayAvatarURL())
           .addFields(
-            { name: "👤 المستخدم الذي استخدم الأمر", value: `<@${interaction.user.id}>`, inline: true },
-            { name: "📨 الشخص المستلم", value: `<@${user.id}>`, inline: true },
-            { name: "📊 الحالة", value: "❌ فشل الإرسال (الخاص مغلق)", inline: true },
-            { name: "💬 محتوى الرسالة", value: message }
+            { name: "👤 المرسل", value: `<@${interaction.user.id}>`, inline: true },
+            { name: "🆔 ID المرسل", value: interaction.user.id, inline: true },
+            { name: "📨 المستلم", value: `<@${user.id}>`, inline: true },
+            { name: "🆔 ID المستلم", value: user.id, inline: true },
+            { name: "💬 محتوى الرسالة", value: message },
+            { name: "📊 الحالة", value: "❌ فشل الإرسال (الخاص مقفل)", inline: true }
           )
           .setTimestamp()
-          .setFooter({ text: `ID المستخدم: ${interaction.user.id}` });
+          .setFooter({ text: `Server: ${interaction.guild.name}` });
 
-        logChannel.send({ embeds: [embed] });
+        const row = new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setLabel("فتح بروفايل المرسل")
+              .setStyle(ButtonStyle.Link)
+              .setURL(`https://discord.com/users/${interaction.user.id}`)
+          );
+
+        logChannel.send({
+          content: `📨 **تم استخدام /send**`,
+          embeds: [embed],
+          components: [row]
+        });
 
       }
 
