@@ -1,7 +1,6 @@
 const {
 Client,
 GatewayIntentBits,
-ChannelType,
 SlashCommandBuilder,
 REST,
 Routes,
@@ -22,7 +21,6 @@ const LOG_SEND = "1367984035283996753";
 const LOG_WARN = "1482927462168920186";
 const LOG_WARNINGS = "1482927612627128516";
 const LOG_DMALL = "1482927730050859080";
-const LOG_ANNOUNCE = "1482927840960843896";
 const LOG_CLEARWARN = "1482927958548287499";
 
 const warnings = new Map();
@@ -36,82 +34,76 @@ GatewayIntentBits.GuildVoiceStates
 });
 
 /*
-COMMANDS (تم اصلاحها فقط)
+COMMANDS
 */
 
-const commands = [
+const commandList = [];
 
-new SlashCommandBuilder()
+const sendCommand = new SlashCommandBuilder()
 .setName("send")
 .setDescription("ارسال رسالة بالخاص")
-.addUserOption(option =>
-option.setName("user")
+.addUserOption(o=>
+o.setName("user")
 .setDescription("الشخص")
 .setRequired(true))
-.addStringOption(option =>
-option.setName("message")
+.addStringOption(o=>
+o.setName("message")
 .setDescription("الرسالة")
-.setRequired(true)),
+.setRequired(true));
 
-new SlashCommandBuilder()
-.setName("announce")
-.setDescription("ارسال اعلان")
-.addChannelOption(option =>
-option.setName("channel")
-.setDescription("الروم")
-.addChannelTypes(ChannelType.GuildText)
-.setRequired(true))
-.addStringOption(option =>
-option.setName("title")
-.setDescription("العنوان"))
-.addStringOption(option =>
-option.setName("message")
-.setDescription("الرسالة")
-.setRequired(true)),
+commandList.push(sendCommand);
 
-new SlashCommandBuilder()
+const dmallCommand = new SlashCommandBuilder()
 .setName("dmall")
 .setDescription("ارسال رسالة لكل السيرفر")
-.addStringOption(option =>
-option.setName("message")
+.addStringOption(o=>
+o.setName("message")
 .setDescription("الرسالة")
-.setRequired(true)),
+.setRequired(true));
 
-new SlashCommandBuilder()
+commandList.push(dmallCommand);
+
+const warnCommand = new SlashCommandBuilder()
 .setName("warn")
 .setDescription("تحذير عضو")
-.addUserOption(option =>
-option.setName("user")
+.addUserOption(o=>
+o.setName("user")
 .setDescription("الشخص")
 .setRequired(true))
-.addStringOption(option =>
-option.setName("reason")
+.addStringOption(o=>
+o.setName("reason")
 .setDescription("السبب")
-.setRequired(true)),
+.setRequired(true));
 
-new SlashCommandBuilder()
+commandList.push(warnCommand);
+
+const warningsCommand = new SlashCommandBuilder()
 .setName("warnings")
 .setDescription("عرض تحذيرات عضو")
-.addUserOption(option =>
-option.setName("user")
+.addUserOption(o=>
+o.setName("user")
 .setDescription("الشخص")
-.setRequired(true)),
+.setRequired(true));
 
-new SlashCommandBuilder()
+commandList.push(warningsCommand);
+
+const clearWarningsCommand = new SlashCommandBuilder()
 .setName("clearwarnings")
 .setDescription("مسح التحذيرات")
-.addUserOption(option =>
-option.setName("user")
+.addUserOption(o=>
+o.setName("user")
 .setDescription("الشخص")
-.setRequired(true))
+.setRequired(true));
 
-].map(c=>c.toJSON());
+commandList.push(clearWarningsCommand);
 
-const rest = new REST({version:"10"}).setToken(TOKEN);
+const commands = commandList.map(cmd => cmd.toJSON());
 
 /*
-READY
+REGISTER COMMANDS
 */
+
+const rest = new REST({version:"10"}).setToken(TOKEN);
 
 client.once("clientReady",async()=>{
 
@@ -129,12 +121,10 @@ AUTO JOIN VOICE
 */
 
 const guild = client.guilds.cache.get(GUILD_ID);
-
 if(!guild) return;
 
 const channel = guild.channels.cache.get(VOICE_CHANNEL_ID);
-
-if(!channel || channel.type !== ChannelType.GuildVoice) return;
+if(!channel) return;
 
 if(!getVoiceConnection(guild.id)){
 
@@ -164,12 +154,10 @@ function log(channelId,embed,button){
 const channel = interaction.guild.channels.cache.get(channelId);
 
 if(channel){
-
 channel.send({
 embeds:[embed],
 components:button ? [button] : []
 });
-
 }
 
 }
@@ -193,45 +181,29 @@ ephemeral:true
 });
 
 const embed = new EmbedBuilder()
-
 .setColor("#2ecc71")
-
 .setAuthor({
 name:"📩 تم استخدام أمر send",
 iconURL:user.displayAvatarURL()
 })
-
 .setThumbnail(target.displayAvatarURL())
-
 .addFields(
-
 {name:"👤 المرسل",value:`<@${user.id}>`,inline:true},
 {name:"🆔 ID المرسل",value:user.id,inline:true},
-
 {name:"📨 المستلم",value:`<@${target.id}>`,inline:true},
 {name:"🆔 ID المستلم",value:target.id,inline:true},
-
 {name:"💬 محتوى الرسالة",value:message},
-
 {name:"📊 الحالة",value:"✅ تم الإرسال",inline:true}
-
 )
-
 .setTimestamp()
-
-.setFooter({
-text:`Server: ${interaction.guild.name}`
-});
+.setFooter({text:`Server: ${interaction.guild.name}`});
 
 const row = new ActionRowBuilder()
-
 .addComponents(
-
 new ButtonBuilder()
 .setLabel("فتح بروفايل المرسل")
 .setStyle(ButtonStyle.Link)
 .setURL(`https://discord.com/users/${user.id}`)
-
 );
 
 log(LOG_SEND,embed,row);
@@ -244,46 +216,6 @@ ephemeral:true
 });
 
 }
-
-}
-
-/*
-ANNOUNCE
-*/
-
-if(interaction.commandName==="announce"){
-
-const channel = interaction.options.getChannel("channel");
-const title = interaction.options.getString("title") || "اعلان";
-const message = interaction.options.getString("message");
-
-const embed = new EmbedBuilder()
-.setColor("#3498db")
-.setTitle(title)
-.setDescription(message)
-.setFooter({text:`بواسطة ${user.tag}`})
-.setTimestamp();
-
-channel.send({embeds:[embed]});
-
-interaction.reply({
-content:"تم ارسال الاعلان",
-ephemeral:true
-});
-
-const logEmbed = new EmbedBuilder()
-
-.setColor("#3498db")
-.setTitle("📢 استخدام امر اعلان")
-
-.addFields(
-{name:"المرسل",value:`<@${user.id}>`},
-{name:"الروم",value:`${channel}`}
-)
-
-.setTimestamp();
-
-log(LOG_ANNOUNCE,logEmbed);
 
 }
 
@@ -315,15 +247,12 @@ count++;
 }
 
 const embed = new EmbedBuilder()
-
 .setColor("#9b59b6")
 .setTitle("📬 DM All")
-
 .addFields(
 {name:"المرسل",value:`<@${user.id}>`},
 {name:"عدد الاعضاء",value:`${count}`}
 )
-
 .setTimestamp();
 
 log(LOG_DMALL,embed);
@@ -351,16 +280,13 @@ ephemeral:true
 });
 
 const embed = new EmbedBuilder()
-
 .setColor("#e67e22")
 .setTitle("⚠️ Warn")
-
 .addFields(
 {name:"المستخدم",value:`<@${target.id}>`},
 {name:"السبب",value:reason},
 {name:"المشرف",value:`<@${user.id}>`}
 )
-
 .setTimestamp();
 
 log(LOG_WARN,embed);
@@ -378,7 +304,6 @@ const target = interaction.options.getUser("user");
 const list = warnings.get(target.id) || [];
 
 const embed = new EmbedBuilder()
-
 .setColor("#f1c40f")
 .setTitle(`تحذيرات ${target.tag}`)
 .setDescription(list.length ? list.join("\n") : "لا يوجد تحذيرات")
@@ -406,15 +331,12 @@ ephemeral:true
 });
 
 const embed = new EmbedBuilder()
-
 .setColor("#2ecc71")
 .setTitle("🧹 Clear Warnings")
-
 .addFields(
 {name:"المستخدم",value:`<@${target.id}>`},
 {name:"بواسطة",value:`<@${user.id}>`}
 )
-
 .setTimestamp();
 
 log(LOG_CLEARWARN,embed);
