@@ -1,14 +1,11 @@
-const { 
+const {
 Client,
 GatewayIntentBits,
 ChannelType,
 SlashCommandBuilder,
 REST,
 Routes,
-EmbedBuilder,
-ActionRowBuilder,
-ButtonBuilder,
-ButtonStyle
+EmbedBuilder
 } = require('discord.js');
 
 const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
@@ -30,10 +27,14 @@ const warnings = new Map();
 const client = new Client({
 intents:[
 GatewayIntentBits.Guilds,
-GatewayIntentBits.GuildVoiceStates,
-GatewayIntentBits.GuildMembers
+GatewayIntentBits.GuildMembers,
+GatewayIntentBits.GuildVoiceStates
 ]
 });
+
+/*
+COMMANDS
+*/
 
 const commands = [
 
@@ -73,6 +74,10 @@ new SlashCommandBuilder()
 
 ].map(c=>c.toJSON());
 
+/*
+REGISTER COMMANDS
+*/
+
 const rest = new REST({version:"10"}).setToken(TOKEN);
 
 client.once("ready", async()=>{
@@ -81,8 +86,14 @@ console.log(`✅ Logged in as ${client.user.tag}`);
 
 await rest.put(
 Routes.applicationGuildCommands(client.user.id,GUILD_ID),
-{body:commands}
+{ body: commands }
 );
+
+console.log("✅ Commands Registered");
+
+/*
+AUTO JOIN VOICE
+*/
 
 const guild = client.guilds.cache.get(GUILD_ID);
 if(!guild) return;
@@ -90,9 +101,7 @@ if(!guild) return;
 const channel = guild.channels.cache.get(VOICE_CHANNEL_ID);
 if(!channel || channel.type!==ChannelType.GuildVoice) return;
 
-const connection = getVoiceConnection(guild.id);
-
-if(!connection){
+if(!getVoiceConnection(guild.id)){
 
 joinVoiceChannel({
 channelId:channel.id,
@@ -105,6 +114,10 @@ selfDeaf:true
 
 });
 
+/*
+COMMAND HANDLER
+*/
+
 client.on("interactionCreate", async interaction=>{
 
 if(!interaction.isChatInputCommand()) return;
@@ -115,14 +128,12 @@ function log(channelId,embed){
 
 const channel = interaction.guild.channels.cache.get(channelId);
 
-if(channel){
-channel.send({embeds:[embed]});
-}
+if(channel) channel.send({embeds:[embed]});
 
 }
 
 /*
-SEND COMMAND
+SEND
 */
 
 if(interaction.commandName==="send"){
@@ -135,16 +146,16 @@ try{
 await target.send(`${message}\n\n<@${target.id}>`);
 
 await interaction.reply({
-content:"تم إرسال الرسالة بنجاح",
+content:"تم ارسال الرسالة",
 ephemeral:true
 });
 
 const embed = new EmbedBuilder()
 .setColor("#2ecc71")
-.setTitle("📩 استخدام امر send")
+.setTitle("📩 Send Command")
 .addFields(
-{name:"المرسل",value:`<@${user.id}>`,inline:true},
-{name:"المستلم",value:`<@${target.id}>`,inline:true},
+{name:"المرسل",value:`<@${user.id}>`},
+{name:"المستلم",value:`<@${target.id}>`},
 {name:"الرسالة",value:message}
 )
 .setTimestamp();
@@ -154,7 +165,7 @@ log(LOG_SEND,embed);
 }catch{
 
 interaction.reply({
-content:"ما قدرت أرسل له خاص",
+content:"الخاص مقفل",
 ephemeral:true
 });
 
@@ -175,7 +186,7 @@ const message = interaction.options.getString("message");
 if(channel.type !== ChannelType.GuildText){
 
 return interaction.reply({
-content:"اختر روم كتابي فقط",
+content:"اختر روم كتابي",
 ephemeral:true
 });
 
@@ -185,7 +196,7 @@ const embed = new EmbedBuilder()
 .setColor("#3498db")
 .setTitle(title)
 .setDescription(message)
-.setFooter({text:`اعلان بواسطة ${user.tag}`})
+.setFooter({text:`بواسطة ${user.tag}`})
 .setTimestamp();
 
 channel.send({embeds:[embed]});
@@ -197,7 +208,7 @@ ephemeral:true
 
 const logEmbed = new EmbedBuilder()
 .setColor("#3498db")
-.setTitle("📢 استخدام امر اعلان")
+.setTitle("📢 Announce")
 .addFields(
 {name:"المرسل",value:`<@${user.id}>`},
 {name:"الروم",value:`${channel}`}
@@ -217,7 +228,7 @@ if(interaction.commandName==="dmall"){
 const message = interaction.options.getString("message");
 
 await interaction.reply({
-content:"جاري ارسال الرسائل...",
+content:"جاري الارسال...",
 ephemeral:true
 });
 
@@ -237,7 +248,7 @@ count++;
 
 const embed = new EmbedBuilder()
 .setColor("#9b59b6")
-.setTitle("📬 ارسال رسالة للجميع")
+.setTitle("📬 DM All")
 .addFields(
 {name:"المرسل",value:`<@${user.id}>`},
 {name:"عدد الاعضاء",value:`${count}`}
@@ -270,7 +281,7 @@ ephemeral:true
 
 const embed = new EmbedBuilder()
 .setColor("#e67e22")
-.setTitle("⚠️ تحذير عضو")
+.setTitle("⚠️ Warn")
 .addFields(
 {name:"المستخدم",value:`<@${target.id}>`},
 {name:"السبب",value:reason},
@@ -321,7 +332,7 @@ ephemeral:true
 
 const embed = new EmbedBuilder()
 .setColor("#2ecc71")
-.setTitle("🧹 تم مسح التحذيرات")
+.setTitle("🧹 Clear Warnings")
 .addFields(
 {name:"المستخدم",value:`<@${target.id}>`},
 {name:"بواسطة",value:`<@${user.id}>`}
