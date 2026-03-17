@@ -17,6 +17,12 @@ const TOKEN = process.env.TOKEN;
 const GUILD_ID = "1367976354104086629";
 const VOICE_CHANNEL_ID = "1401074295022817381";
 
+/* ✅ روم الفيديو */
+const VIDEO_ROOM = "1477417977472090316";
+
+/* ✅ حالة النظام */
+let mediaOnlyEnabled = true;
+
 const LOG_SEND = "1367984035283996753";
 const LOG_WARN = "1482927462168920186";
 const LOG_WARNINGS = "1482927612627128516";
@@ -44,7 +50,11 @@ const client = new Client({
 intents:[
 GatewayIntentBits.Guilds,
 GatewayIntentBits.GuildMembers,
-GatewayIntentBits.GuildVoiceStates
+GatewayIntentBits.GuildVoiceStates,
+
+/* ✅ فقط إضافة */
+GatewayIntentBits.GuildMessages,
+GatewayIntentBits.MessageContent
 ]
 });
 
@@ -91,7 +101,12 @@ new SlashCommandBuilder()
 new SlashCommandBuilder()
 .setName("clearwarnings")
 .setDescription("مسح التحذيرات")
-.addUserOption(o=>o.setName("user").setDescription("الشخص").setRequired(true))
+.addUserOption(o=>o.setName("user").setDescription("الشخص").setRequired(true)),
+
+/* ✅ أمر التحكم */
+new SlashCommandBuilder()
+.setName("mediaonly")
+.setDescription("تشغيل او ايقاف نظام الصور فقط")
 
 ].map(c=>c.toJSON());
 
@@ -135,6 +150,24 @@ selfDeaf:true
 
 });
 
+/* ✅ فلترة الروم */
+
+client.on("messageCreate", async (message) => {
+
+if(!mediaOnlyEnabled) return;
+if(message.author.bot) return;
+if(message.channel.id !== VIDEO_ROOM) return;
+
+if(message.attachments.size === 0){
+return message.delete().catch(()=>{});
+}
+
+if(message.content && message.content.trim() !== ""){
+return message.delete().catch(()=>{});
+}
+
+});
+
 /*
 LOG FUNCTION
 */
@@ -161,6 +194,19 @@ client.on("interactionCreate", async interaction => {
 if(!interaction.isChatInputCommand()) return;
 
 const user = interaction.user;
+
+/* ✅ تشغيل/إيقاف */
+
+if(interaction.commandName === "mediaonly"){
+
+mediaOnlyEnabled = !mediaOnlyEnabled;
+
+return interaction.reply({
+content: mediaOnlyEnabled ? "✅ تم تشغيل النظام" : "❌ تم ايقاف النظام",
+ephemeral:true
+});
+
+}
 
 /*
 SEND
