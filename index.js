@@ -52,7 +52,6 @@ GatewayIntentBits.Guilds,
 GatewayIntentBits.GuildMembers,
 GatewayIntentBits.GuildVoiceStates,
 
-/* ✅ فقط إضافة */
 GatewayIntentBits.GuildMessages,
 GatewayIntentBits.MessageContent
 ]
@@ -103,7 +102,6 @@ new SlashCommandBuilder()
 .setDescription("مسح التحذيرات")
 .addUserOption(o=>o.setName("user").setDescription("الشخص").setRequired(true)),
 
-/* ✅ أمر التحكم */
 new SlashCommandBuilder()
 .setName("mediaonly")
 .setDescription("تشغيل او ايقاف نظام الصور فقط")
@@ -194,8 +192,6 @@ client.on("interactionCreate", async interaction => {
 if(!interaction.isChatInputCommand()) return;
 
 const user = interaction.user;
-
-/* ✅ تشغيل/إيقاف */
 
 if(interaction.commandName === "mediaonly"){
 
@@ -456,6 +452,41 @@ if(entry.executor.id !== client.user.id){
 await newMember.roles.add(warnRole).catch(()=>{});
 
 }
+
+}
+
+});
+
+/* 🔥 حماية البوت الصوتي */
+
+client.on("voiceStateUpdate", async (oldState, newState) => {
+
+const botId = client.user.id;
+
+if(oldState.id !== botId) return;
+
+/* إذا اننقل */
+if(oldState.channelId && newState.channelId && newState.channelId !== VOICE_CHANNEL_ID){
+
+try{
+await newState.setChannel(VOICE_CHANNEL_ID);
+}catch{}
+
+}
+
+/* إذا انطرد */
+if(oldState.channelId && !newState.channelId){
+
+try{
+
+joinVoiceChannel({
+channelId: VOICE_CHANNEL_ID,
+guildId: oldState.guild.id,
+adapterCreator: oldState.guild.voiceAdapterCreator,
+selfDeaf: true
+});
+
+}catch{}
 
 }
 
