@@ -41,7 +41,9 @@ const WARN_ROLES = {
 };
 
 const warnings = new Map();
-
+const stats = new Map();
+const VOICE_TIMES = new Map();
+const LEADERBOARD_CHANNEL = "1484809257361870892";
 /*
 CLIENT
 */
@@ -104,6 +106,11 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
 .setName("mediaonly")
+  ,
+  
+new SlashCommandBuilder()
+.setName("leaderboard")
+.setDescription("عرض التوب")
 .setDescription("تشغيل او ايقاف نظام الصور فقط")
 
 ].map(c=>c.toJSON());
@@ -163,7 +170,11 @@ return message.delete().catch(()=>{});
 if(message.content && message.content.trim() !== ""){
 return message.delete().catch(()=>{});
 }
-
+/* LEADERBOARD COUNT */
+if(!stats.has(message.author.id)){
+stats.set(message.author.id,{messages:0,voice:0});
+}
+stats.get(message.author.id).messages++;
 });
 
 /*
@@ -201,7 +212,75 @@ return interaction.reply({
 content: mediaOnlyEnabled ? "✅ تم تشغيل النظام" : "❌ تم ايقاف النظام",
 ephemeral:true
 });
+/* LEADERBOARD COMMAND */
+if(interaction.commandName === "leaderboard"){
 
+const sorted = [...stats.entries()]
+.sort((a,b)=> (b[1].messages + b[1].voice) - (a[1].messages + a[1].voice))
+.slice(0,10);
+
+let text = "";
+
+sorted.forEach((user,index)=>{
+
+const id = user[0];
+const data = user[1];
+
+const hours = Math.floor(data.voice / 1000 / 60 / 60);
+const minutes = Math.floor((data.voice / 1000 / 60) % 60);
+
+text += `\n${index+1}. <@${id}>
+💬 ${data.messages} | ⏱ ${hours}h ${minutes}m\n`;
+
+});
+/* LEADERBOARD COMMAND */
+if(interaction.commandName === "leaderboard"){
+
+const sorted = [...stats.entries()]
+.sort((a,b)=> (b[1].messages + b[1].voice) - (a[1].messages + a[1].voice))
+.slice(0,10);
+
+let text = "";
+
+sorted.forEach((user,index)=>{
+
+const id = user[0];
+const data = user[1];
+
+const hours = Math.floor(data.voice / 1000 / 60 / 60);
+const minutes = Math.floor((data.voice / 1000 / 60) % 60);
+
+text += `\n${index+1}. <@${id}>
+💬 ${data.messages} | ⏱ ${hours}h ${minutes}m\n`;
+
+});
+
+const embed = new EmbedBuilder()
+.setTitle("🏆 Leaderboard - النخبة")
+.setDescription(text || "لا يوجد بيانات")
+.setColor("#00ffcc");
+
+interaction.reply({embeds:[embed]});
+
+const channel = interaction.guild.channels.cache.get(LEADERBOARD_CHANNEL);
+if(channel){
+channel.send({embeds:[embed]});
+}
+
+}
+const embed = new EmbedBuilder()
+.setTitle("🏆 Leaderboard - النخبة")
+.setDescription(text || "لا يوجد بيانات")
+.setColor("#00ffcc");
+
+interaction.reply({embeds:[embed]});
+
+const channel = interaction.guild.channels.cache.get(LEADERBOARD_CHANNEL);
+if(channel){
+channel.send({embeds:[embed]});
+}
+
+}
 }
 
 /*
@@ -487,6 +566,33 @@ selfDeaf: true
 });
 
 }catch{}
+
+}
+
+});
+/* VOICE TRACK */
+client.on("voiceStateUpdate",(oldState,newState)=>{
+
+const userId = newState.id;
+
+if(!oldState.channelId && newState.channelId){
+VOICE_TIMES.set(userId,Date.now());
+}
+
+if(oldState.channelId && !newState.channelId){
+
+const joinTime = VOICE_TIMES.get(userId);
+if(!joinTime) return;
+
+const diff = Date.now() - joinTime;
+
+if(!stats.has(userId)){
+stats.set(userId,{messages:0,voice:0});
+}
+
+stats.get(userId).voice += diff;
+
+VOICE_TIMES.delete(userId);
 
 }
 
