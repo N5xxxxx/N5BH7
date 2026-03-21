@@ -210,7 +210,7 @@ function formatVoiceDuration(ms) {
     return `${minutes} دقيقة`;
   }
 
-  return `${hours} ساعة و ${minutes} دقيقة`;
+  return `${hours} ساعة • ${minutes} دقيقة`;
 }
 
 function sortLeaderboardEntries() {
@@ -233,15 +233,10 @@ function buildLeaderboardEmbed(guild) {
   const entries = sortLeaderboardEntries().slice(0, 10);
 
   const description = entries.length
-    ? entries
-        .map(([userId, data], index) => {
-          return [
-            `**#${index + 1}** <@${userId}>`,
-            `الرسائل: \`${data.messages}\``,
-            `الوقت الصوتي: \`${formatVoiceDuration(data.voiceMs)}\``
-          ].join(" | ");
-        })
-        .join("\n")
+    ? entries.map(([userId, data], index) => {
+        return `**#${index + 1}** | <@${userId}>\n` +
+          `> **الرسائل:** \`${data.messages}\` | **الوقت الصوتي:** \`${formatVoiceDuration(data.voiceMs)}\``;
+      }).join("\n\n")
     : "لا يوجد بيانات حتى الآن.";
 
   return new EmbedBuilder()
@@ -253,16 +248,6 @@ function buildLeaderboardEmbed(guild) {
     .setTitle("🏆 لوحة النشاط")
     .setDescription(description)
     .addFields(
-      {
-        name: "📌 الروم",
-        value: `<#${db.leaderboard.channelId}>`,
-        inline: true
-      },
-      {
-        name: "🎖 رتبة التحكم",
-        value: `<@&${LEADERBOARD_ROLE_ID}>`,
-        inline: true
-      },
       {
         name: "🕒 آخر تحديث",
         value: `<t:${Math.floor(Date.now() / 1000)}:R>`,
@@ -366,9 +351,6 @@ function warningMapDelete(userId) {
   scheduleSave();
 }
 
-/*
-CLIENT
-*/
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -379,9 +361,6 @@ const client = new Client({
   ]
 });
 
-/*
-COMMANDS
-*/
 const commands = [
   new SlashCommandBuilder()
     .setName("send")
@@ -447,9 +426,6 @@ const commands = [
     )
 ].map(c => c.toJSON());
 
-/*
-REGISTER COMMANDS
-*/
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 client.once("clientReady", async () => {
@@ -467,9 +443,6 @@ client.once("clientReady", async () => {
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) return;
 
-  /*
-  AUTO JOIN VOICE
-  */
   const channel = guild.channels.cache.get(VOICE_CHANNEL_ID);
   if (channel && !getVoiceConnection(guild.id)) {
     joinVoiceChannel({
@@ -480,9 +453,6 @@ client.once("clientReady", async () => {
     });
   }
 
-  /*
-  استرجاع الحالات الحالية للفويس
-  */
   guild.voiceStates.cache.forEach(state => {
     if (!state.member) return;
     if (state.member.user.bot) return;
@@ -500,7 +470,6 @@ client.once("clientReady", async () => {
   }, LEADERBOARD_UPDATE_INTERVAL);
 });
 
-/* ✅ فلترة الروم + تسجيل الرسائل */
 client.on("messageCreate", async (message) => {
   if (!message.guild || message.guild.id !== GUILD_ID) return;
   if (message.author.bot) return;
@@ -519,9 +488,6 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-/*
-LOG FUNCTION
-*/
 function sendLog(interaction, channelId, embed, row) {
   const channel = interaction.guild.channels.cache.get(channelId);
 
@@ -533,9 +499,6 @@ function sendLog(interaction, channelId, embed, row) {
   }
 }
 
-/*
-BUTTON HANDLER
-*/
 client.on("interactionCreate", async interaction => {
   if (!interaction.isButton()) return;
   if (interaction.customId !== "leaderboard_refresh") return;
@@ -555,9 +518,6 @@ client.on("interactionCreate", async interaction => {
   });
 });
 
-/*
-COMMAND HANDLER
-*/
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -572,9 +532,6 @@ client.on("interactionCreate", async interaction => {
     });
   }
 
-  /*
-  LEADERBOARD
-  */
   if (interaction.commandName === "leaderboard") {
     if (!interaction.member || !hasLeaderboardRole(interaction.member)) {
       return interaction.reply({
@@ -655,9 +612,6 @@ client.on("interactionCreate", async interaction => {
     }
   }
 
-  /*
-  SEND
-  */
   if (interaction.commandName === "send") {
     const target = interaction.options.getUser("user");
     const message = interaction.options.getString("message");
@@ -708,9 +662,6 @@ client.on("interactionCreate", async interaction => {
     }
   }
 
-  /*
-  DM ALL
-  */
   if (interaction.commandName === "dmall") {
     const message = interaction.options.getString("message");
 
@@ -753,9 +704,6 @@ client.on("interactionCreate", async interaction => {
     });
   }
 
-  /*
-  WARN SYSTEM
-  */
   if (interaction.commandName === "warn") {
     const target = interaction.options.getMember("user");
     const level = interaction.options.getInteger("level");
@@ -813,9 +761,6 @@ client.on("interactionCreate", async interaction => {
     sendLog(interaction, LOG_WARN, embed);
   }
 
-  /*
-  WARNINGS
-  */
   if (interaction.commandName === "warnings") {
     const target = interaction.options.getUser("user");
     const data = warningMapGet(target.id);
@@ -847,9 +792,6 @@ client.on("interactionCreate", async interaction => {
     sendLog(interaction, LOG_WARNINGS, embed);
   }
 
-  /*
-  CLEAR WARNINGS
-  */
   if (interaction.commandName === "clearwarnings") {
     const target = interaction.options.getMember("user");
 
@@ -886,9 +828,6 @@ client.on("interactionCreate", async interaction => {
   }
 });
 
-/*
-WARN ROLE PROTECTION
-*/
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
   const data = warningMapGet(newMember.id);
   if (!data) return;
@@ -916,13 +855,9 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
   }
 });
 
-/* 🔥 حماية البوت الصوتي + تتبع وقت الفويس */
 client.on("voiceStateUpdate", async (oldState, newState) => {
   const botId = client.user.id;
 
-  /*
-  حماية البوت نفسه
-  */
   if (oldState.id === botId) {
     if (oldState.channelId && newState.channelId && newState.channelId !== VOICE_CHANNEL_ID) {
       try {
@@ -944,9 +879,6 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     return;
   }
 
-  /*
-  تتبع أعضاء السيرفر
-  */
   const member = newState.member || oldState.member;
   if (!member || member.user.bot) return;
   if (member.guild.id !== GUILD_ID) return;
