@@ -17,7 +17,6 @@ const {
 
 const {
   joinVoiceChannel,
-  getVoiceConnection,
   createAudioPlayer,
   createAudioResource,
   AudioPlayerStatus,
@@ -231,17 +230,16 @@ function formatVoiceDuration(ms) {
 }
 
 function sortLeaderboardEntries() {
-  return Object.entries(db.leaderboard.users)
-    .sort((a, b) => {
-      const aData = a[1];
-      const bData = b[1];
+  return Object.entries(db.leaderboard.users).sort((a, b) => {
+    const aData = a[1];
+    const bData = b[1];
 
-      if (bData.messages !== aData.messages) {
-        return bData.messages - aData.messages;
-      }
+    if (bData.messages !== aData.messages) {
+      return bData.messages - aData.messages;
+    }
 
-      return bData.voiceMs - aData.voiceMs;
-    });
+    return bData.voiceMs - aData.voiceMs;
+  });
 }
 
 function buildLeaderboardEmbed(guild) {
@@ -250,9 +248,11 @@ function buildLeaderboardEmbed(guild) {
   const entries = sortLeaderboardEntries().slice(0, 10);
 
   const description = entries.length
-    ? entries.map(([userId, data], index) => {
-        return `**#${index + 1}** | <@${userId}>\n> **الرسائل:** \`${data.messages}\` | **الوقت الصوتي:** \`${formatVoiceDuration(data.voiceMs)}\``;
-      }).join("\n\n")
+    ? entries
+        .map(([userId, data], index) => {
+          return `**#${index + 1}** | <@${userId}>\n> **الرسائل:** \`${data.messages}\` | **الوقت الصوتي:** \`${formatVoiceDuration(data.voiceMs)}\``;
+        })
+        .join("\n\n")
     : "لا يوجد بيانات حتى الآن.";
 
   return new EmbedBuilder()
@@ -314,16 +314,10 @@ async function updateLeaderboardMessage(guild) {
 
   try {
     const channel = guild.channels.cache.get(db.leaderboard.channelId);
-    if (!channel || !channel.isTextBased()) {
-      leaderboardUpdating = false;
-      return;
-    }
+    if (!channel || !channel.isTextBased()) return;
 
     const message = await ensureLeaderboardMessage(guild);
-    if (!message) {
-      leaderboardUpdating = false;
-      return;
-    }
+    if (!message) return;
 
     const embed = buildLeaderboardEmbed(guild);
 
@@ -363,21 +357,6 @@ function warningMapSet(userId, value) {
 function warningMapDelete(userId) {
   delete db.warnings[userId];
   scheduleSave();
-}
-
-function formatDuration(seconds) {
-  if (!seconds || Number.isNaN(seconds)) return "غير معروف";
-
-  const total = Math.floor(seconds);
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const secs = total % 60;
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  }
-
-  return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
 function truncate(text, max = 90) {
@@ -485,6 +464,8 @@ async function playNextTrack(guildId) {
   if (!guild) return;
 
   if (state.queue.length === 0) {
+    state.current = null;
+    state.isPlaying = false;
     await joinBaseVoiceChannel(guild).catch(() => {});
     return;
   }
@@ -496,6 +477,7 @@ async function playNextTrack(guildId) {
   try {
     if (!state.connection || state.voiceChannelId !== track.voiceChannelId) {
       const voiceChannel = guild.channels.cache.get(track.voiceChannelId);
+
       if (!voiceChannel || !voiceChannel.isVoiceBased()) {
         state.current = null;
         state.isPlaying = false;
@@ -535,11 +517,11 @@ async function playNextTrack(guildId) {
             inline: true
           }
         )
-        .setThumbnail(track.thumbnail || null)
-        .setFooter({
-          text: "YouTube Music Search"
-        })
         .setTimestamp();
+
+      if (track.thumbnail) {
+        embed.setThumbnail(track.thumbnail);
+      }
 
       textChannel.send({ embeds: [embed] }).catch(() => {});
     }
@@ -573,9 +555,12 @@ function buildQueueEmbed(guildId) {
     : "لا يوجد شيء يعمل الآن.";
 
   const queueLines = state.queue.length
-    ? state.queue.slice(0, 10).map((track, index) => {
-        return `**${index + 1}.** [${truncate(track.title, 60)}](${track.url}) - <@${track.requestedBy}>`;
-      }).join("\n")
+    ? state.queue
+        .slice(0, 10)
+        .map((track, index) => {
+          return `**${index + 1}.** [${truncate(track.title, 60)}](${track.url}) - <@${track.requestedBy}>`;
+        })
+        .join("\n")
     : "القائمة فارغة.";
 
   return new EmbedBuilder()
@@ -595,9 +580,11 @@ function buildQueueEmbed(guildId) {
 }
 
 function makeSearchResultsEmbed(query, results, user) {
-  const description = results.map((video, index) => {
-    return `**${index + 1}.** ${truncate(video.title, 80)}\n> المدة: \`${video.durationRaw || "غير معروف"}\``;
-  }).join("\n\n");
+  const description = results
+    .map((video, index) => {
+      return `**${index + 1}.** ${truncate(video.title, 80)}\n> المدة: \`${video.durationRaw || "غير معروف"}\``;
+    })
+    .join("\n\n");
 
   return new EmbedBuilder()
     .setColor("#000000")
@@ -760,7 +747,7 @@ client.once("clientReady", async () => {
   }, LEADERBOARD_UPDATE_INTERVAL);
 });
 
-client.on("messageCreate", async (message) => {
+client.on("messageCreate", async message => {
   if (!message.guild || message.guild.id !== GUILD_ID) return;
   if (message.author.bot) return;
 
@@ -808,7 +795,95 @@ client.on("interactionCreate", async interaction => {
     });
   }
 
-if (interaction.isStringSelectMenu()) {
+  if (interaction.isStringSelectMenu()) {
+    if (!interaction.customId.startsWith("music_select_")) return;
+
+    const selection = pendingMusicSelections.get(interaction.customId);
+
+    if (!selection) {
+      return interaction.reply({
+        content: "❌ انتهت صلاحية القائمة، أعد كتابة الأمر /play",
+        ephemeral: true
+      });
+    }
+
+    if (selection.userId !== interaction.user.id) {
+      return interaction.reply({
+        content: "❌ هذه القائمة ليست لك.",
+        ephemeral: true
+      });
+    }
+
+    const selectedIndex = Number(interaction.values[0]);
+    const selectedTrack = selection.results[selectedIndex];
+
+    if (!selectedTrack) {
+      return interaction.reply({
+        content: "❌ الاختيار غير صالح.",
+        ephemeral: true
+      });
+    }
+
+    pendingMusicSelections.delete(interaction.customId);
+
+    try {
+      await interaction.deferUpdate();
+
+      await queueTrack(
+        interaction.guild,
+        interaction.channel.id,
+        selection.voiceChannelId,
+        {
+          title: selectedTrack.title,
+          url: selectedTrack.url,
+          duration: selectedTrack.durationRaw || "غير معروف",
+          thumbnail: selectedTrack.thumbnails?.[0]?.url || null,
+          requestedBy: interaction.user.id
+        }
+      );
+
+      const embed = new EmbedBuilder()
+        .setColor("#000000")
+        .setTitle("➕ تمت الإضافة للقائمة")
+        .setDescription(`**[${truncate(selectedTrack.title, 120)}](${selectedTrack.url})**`)
+        .addFields(
+          {
+            name: "👤 بواسطة",
+            value: `<@${interaction.user.id}>`,
+            inline: true
+          },
+          {
+            name: "⏱ المدة",
+            value: selectedTrack.durationRaw || "غير معروف",
+            inline: true
+          }
+        )
+        .setTimestamp();
+
+      if (selectedTrack.thumbnails?.[0]?.url) {
+        embed.setThumbnail(selectedTrack.thumbnails[0].url);
+      }
+
+      await interaction.editReply({
+        content: `✅ تم اختيار الأغنية: **${truncate(selectedTrack.title, 100)}**`,
+        embeds: [embed],
+        components: []
+      });
+    } catch (error) {
+      console.error("❌ Music select error:", error);
+
+      try {
+        await interaction.editReply({
+          content: "❌ صار خطأ أثناء اختيار أو تشغيل الأغنية.",
+          embeds: [],
+          components: []
+        });
+      } catch {}
+    }
+
+    return;
+  }
+});
 
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
