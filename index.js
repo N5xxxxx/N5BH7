@@ -1,6 +1,5 @@
 const fs = require("fs");
 const path = require("path");
-const play = require("play-dl");
 
 const {
   Client,
@@ -11,19 +10,10 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
-  StringSelectMenuBuilder
+  ButtonStyle
 } = require("discord.js");
 
-const {
-  joinVoiceChannel,
-  createAudioPlayer,
-  createAudioResource,
-  AudioPlayerStatus,
-  NoSubscriberBehavior,
-  entersState,
-  VoiceConnectionStatus
-} = require("@discordjs/voice");
+const { joinVoiceChannel } = require("@discordjs/voice");
 
 const TOKEN = process.env.TOKEN;
 
@@ -39,10 +29,6 @@ const LEADERBOARD_ROLE_ID = "1426999940944756889";
 
 /* ✅ تحديث تلقائي كل 5 ثواني */
 const LEADERBOARD_UPDATE_INTERVAL = 5000;
-
-/* ✅ إعدادات الموسيقى */
-const MUSIC_RESULT_LIMIT = 5;
-const MUSIC_SELECT_TIMEOUT = 60_000;
 
 /* ✅ حالة النظام */
 let mediaOnlyEnabled = true;
@@ -71,8 +57,6 @@ let leaderboardInterval = null;
 let leaderboardUpdating = false;
 
 const activeVoiceSessions = new Map();
-const pendingMusicSelections = new Map();
-const musicStates = new Map();
 
 const db = {
   warnings: {},
@@ -359,254 +343,6 @@ function warningMapDelete(userId) {
   scheduleSave();
 }
 
-function truncate(text, max = 90) {
-  if (!text) return "بدون عنوان";
-  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
-}
-
-function getMusicState(guildId) {
-  if (musicStates.has(guildId)) {
-    return musicStates.get(guildId);
-  }
-
-  const player = createAudioPlayer({
-    behaviors: {
-      noSubscriber: NoSubscriberBehavior.Pause
-    }
-  });
-
-  const state = {
-    player,
-    queue: [],
-    current: null,
-    connection: null,
-    textChannelId: null,
-    voiceChannelId: null,
-    allowedChannelId: null,
-    isPlaying: false
-  };
-
-  player.on(AudioPlayerStatus.Idle, async () => {
-    state.isPlaying = false;
-    state.current = null;
-    await playNextTrack(guildId);
-  });
-
-  player.on("error", async (error) => {
-    console.error("❌ Music player error:", error);
-    state.isPlaying = false;
-    state.current = null;
-
-    const guild = client.guilds.cache.get(guildId);
-    if (guild && state.textChannelId) {
-      const textChannel = guild.channels.cache.get(state.textChannelId);
-      if (textChannel && textChannel.isTextBased()) {
-        textChannel.send("❌ صار خطأ أثناء تشغيل المقطع، انتقلت للمقطع اللي بعده.").catch(() => {});
-      }
-    }
-
-    await playNextTrack(guildId);
-  });
-
-  musicStates.set(guildId, state);
-  return state;
-}
-
-async function joinBaseVoiceChannel(guild) {
-  const channel = guild.channels.cache.get(VOICE_CHANNEL_ID);
-  if (!channel || !channel.isVoiceBased()) return null;
-
-  const connection = joinVoiceChannel({
-    channelId: channel.id,
-    guildId: guild.id,
-    adapterCreator: guild.voiceAdapterCreator,
-    selfDeaf: true
-  });
-
-  try {
-    await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
-  } catch {}
-
-  const state = getMusicState(guild.id);
-  state.connection = connection;
-  state.allowedChannelId = null;
-  state.voiceChannelId = channel.id;
-  state.connection.subscribe(state.player);
-
-  return connection;
-}
-
-async function connectToVoiceChannel(voiceChannel, textChannelId) {
-  const state = getMusicState(voiceChannel.guild.id);
-
-  const connection = joinVoiceChannel({
-    channelId: voiceChannel.id,
-    guildId: voiceChannel.guild.id,
-    adapterCreator: voiceChannel.guild.voiceAdapterCreator,
-    selfDeaf: true
-  });
-
-  await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
-
-  state.connection = connection;
-  state.voiceChannelId = voiceChannel.id;
-  state.allowedChannelId = voiceChannel.id;
-  state.textChannelId = textChannelId;
-  state.connection.subscribe(state.player);
-
-  return state;
-}
-
-async function playNextTrack(guildId) {
-  const guild = client.guilds.cache.get(guildId);
-  const state = getMusicState(guildId);
-
-  if (!guild) return;
-
-  if (state.queue.length === 0) {
-    state.current = null;
-    state.isPlaying = false;
-    await joinBaseVoiceChannel(guild).catch(() => {});
-    return;
-  }
-
-  const track = state.queue.shift();
-  state.current = track;
-  state.isPlaying = true;
-
-  try {
-    if (!state.connection || state.voiceChannelId !== track.voiceChannelId) {
-      const voiceChannel = guild.channels.cache.get(track.voiceChannelId);
-
-      if (!voiceChannel || !voiceChannel.isVoiceBased()) {
-        state.current = null;
-        state.isPlaying = false;
-        return playNextTrack(guildId);
-      }
-
-      await connectToVoiceChannel(voiceChannel, track.textChannelId);
-    }
-
-    const stream = await play.stream(track.url);
-    const resource = createAudioResource(stream.stream, {
-      inputType: stream.type
-    });
-
-    state.player.play(resource);
-
-    const textChannel = guild.channels.cache.get(track.textChannelId);
-    if (textChannel && textChannel.isTextBased()) {
-      const embed = new EmbedBuilder()
-        .setColor("#000000")
-        .setTitle("🎶 يتم الآن التشغيل")
-        .setDescription(`**[${truncate(track.title, 120)}](${track.url})**`)
-        .addFields(
-          {
-            name: "👤 بواسطة",
-            value: `<@${track.requestedBy}>`,
-            inline: true
-          },
-          {
-            name: "⏱ المدة",
-            value: track.duration || "غير معروف",
-            inline: true
-          },
-          {
-            name: "🎧 الروم",
-            value: `<#${track.voiceChannelId}>`,
-            inline: true
-          }
-        )
-        .setTimestamp();
-
-      if (track.thumbnail) {
-        embed.setThumbnail(track.thumbnail);
-      }
-
-      textChannel.send({ embeds: [embed] }).catch(() => {});
-    }
-  } catch (error) {
-    console.error("❌ Failed to play track:", error);
-    state.current = null;
-    state.isPlaying = false;
-    await playNextTrack(guildId);
-  }
-}
-
-async function queueTrack(guild, textChannelId, voiceChannelId, track) {
-  const state = getMusicState(guild.id);
-
-  state.queue.push({
-    ...track,
-    textChannelId,
-    voiceChannelId
-  });
-
-  if (!state.isPlaying && !state.current) {
-    await playNextTrack(guild.id);
-  }
-}
-
-function buildQueueEmbed(guildId) {
-  const state = getMusicState(guildId);
-
-  const currentLine = state.current
-    ? `**الآن:** [${truncate(state.current.title, 70)}](${state.current.url}) - <@${state.current.requestedBy}>`
-    : "لا يوجد شيء يعمل الآن.";
-
-  const queueLines = state.queue.length
-    ? state.queue
-        .slice(0, 10)
-        .map((track, index) => {
-          return `**${index + 1}.** [${truncate(track.title, 60)}](${track.url}) - <@${track.requestedBy}>`;
-        })
-        .join("\n")
-    : "القائمة فارغة.";
-
-  return new EmbedBuilder()
-    .setColor("#000000")
-    .setTitle("🎵 قائمة التشغيل")
-    .addFields(
-      {
-        name: "Now Playing",
-        value: currentLine
-      },
-      {
-        name: "Queue",
-        value: queueLines
-      }
-    )
-    .setTimestamp();
-}
-
-function makeSearchResultsEmbed(query, results, user) {
-  const description = results
-    .map((video, index) => {
-      return `**${index + 1}.** ${truncate(video.title, 80)}\n> المدة: \`${video.durationRaw || "غير معروف"}\``;
-    })
-    .join("\n\n");
-
-  return new EmbedBuilder()
-    .setColor("#000000")
-    .setTitle("🔎 نتائج البحث")
-    .setDescription(description)
-    .addFields(
-      {
-        name: "🎵 البحث",
-        value: query
-      },
-      {
-        name: "👤 الطلب بواسطة",
-        value: `<@${user.id}>`,
-        inline: true
-      }
-    )
-    .setFooter({
-      text: "اختر الأغنية من القائمة بالأسفل"
-    })
-    .setTimestamp();
-}
-
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -679,36 +415,7 @@ const commands = [
       o.setName("user")
         .setDescription("عضو معين لعرض احصائياته")
         .setRequired(false)
-    ),
-
-  new SlashCommandBuilder()
-    .setName("play")
-    .setDescription("تشغيل اغنية من يوتيوب عبر البحث")
-    .addStringOption(o =>
-      o.setName("query")
-        .setDescription("اسم الأغنية")
-        .setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
-    .setName("skip")
-    .setDescription("تخطي الأغنية الحالية"),
-
-  new SlashCommandBuilder()
-    .setName("stop")
-    .setDescription("إيقاف الموسيقى وتصفير القائمة"),
-
-  new SlashCommandBuilder()
-    .setName("pause")
-    .setDescription("إيقاف مؤقت"),
-
-  new SlashCommandBuilder()
-    .setName("resume")
-    .setDescription("استكمال التشغيل"),
-
-  new SlashCommandBuilder()
-    .setName("queue")
-    .setDescription("عرض قائمة التشغيل")
+    )
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -728,7 +435,15 @@ client.once("clientReady", async () => {
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) return;
 
-  await joinBaseVoiceChannel(guild).catch(() => {});
+  const voiceChannel = guild.channels.cache.get(VOICE_CHANNEL_ID);
+  if (voiceChannel && voiceChannel.isVoiceBased()) {
+    joinVoiceChannel({
+      channelId: voiceChannel.id,
+      guildId: guild.id,
+      adapterCreator: guild.voiceAdapterCreator,
+      selfDeaf: true
+    });
+  }
 
   guild.voiceStates.cache.forEach(state => {
     if (!state.member) return;
@@ -777,112 +492,22 @@ function sendLog(interaction, channelId, embed, row) {
 }
 
 client.on("interactionCreate", async interaction => {
-  if (interaction.isButton()) {
-    if (interaction.customId !== "leaderboard_refresh") return;
+  if (!interaction.isButton()) return;
+  if (interaction.customId !== "leaderboard_refresh") return;
 
-    if (!interaction.member || !hasLeaderboardRole(interaction.member)) {
-      return interaction.reply({
-        content: "❌ ما عندك صلاحية استخدام زر التحديث.",
-        ephemeral: true
-      });
-    }
-
-    await updateLeaderboardMessage(interaction.guild);
-
+  if (!interaction.member || !hasLeaderboardRole(interaction.member)) {
     return interaction.reply({
-      content: "✅ تم تحديث الليدر بورد.",
+      content: "❌ ما عندك صلاحية استخدام زر التحديث.",
       ephemeral: true
     });
   }
 
-  if (interaction.isStringSelectMenu()) {
-    if (!interaction.customId.startsWith("music_select_")) return;
+  await updateLeaderboardMessage(interaction.guild);
 
-    const selection = pendingMusicSelections.get(interaction.customId);
-
-    if (!selection) {
-      return interaction.reply({
-        content: "❌ انتهت صلاحية القائمة، أعد كتابة الأمر /play",
-        ephemeral: true
-      });
-    }
-
-    if (selection.userId !== interaction.user.id) {
-      return interaction.reply({
-        content: "❌ هذه القائمة ليست لك.",
-        ephemeral: true
-      });
-    }
-
-    const selectedIndex = Number(interaction.values[0]);
-    const selectedTrack = selection.results[selectedIndex];
-
-    if (!selectedTrack) {
-      return interaction.reply({
-        content: "❌ الاختيار غير صالح.",
-        ephemeral: true
-      });
-    }
-
-    pendingMusicSelections.delete(interaction.customId);
-
-    try {
-      await interaction.deferUpdate();
-
-      await queueTrack(
-        interaction.guild,
-        interaction.channel.id,
-        selection.voiceChannelId,
-        {
-          title: selectedTrack.title,
-          url: selectedTrack.url,
-          duration: selectedTrack.durationRaw || "غير معروف",
-          thumbnail: selectedTrack.thumbnails?.[0]?.url || null,
-          requestedBy: interaction.user.id
-        }
-      );
-
-      const embed = new EmbedBuilder()
-        .setColor("#000000")
-        .setTitle("➕ تمت الإضافة للقائمة")
-        .setDescription(`**[${truncate(selectedTrack.title, 120)}](${selectedTrack.url})**`)
-        .addFields(
-          {
-            name: "👤 بواسطة",
-            value: `<@${interaction.user.id}>`,
-            inline: true
-          },
-          {
-            name: "⏱ المدة",
-            value: selectedTrack.durationRaw || "غير معروف",
-            inline: true
-          }
-        )
-        .setTimestamp();
-
-      if (selectedTrack.thumbnails?.[0]?.url) {
-        embed.setThumbnail(selectedTrack.thumbnails[0].url);
-      }
-
-      await interaction.editReply({
-        content: `✅ تم اختيار الأغنية: **${truncate(selectedTrack.title, 100)}**`,
-        embeds: [embed],
-        components: []
-      });
-    } catch (error) {
-      console.error("❌ Music select error:", error);
-
-      try {
-        await interaction.editReply({
-          content: "❌ صار خطأ أثناء اختيار أو تشغيل الأغنية.",
-          embeds: [],
-          components: []
-        });
-      } catch {}
-    }
-
-    return;
-  }
+  return interaction.reply({
+    content: "✅ تم تحديث الليدر بورد.",
+    ephemeral: true
+  });
 });
 
 client.on("interactionCreate", async interaction => {
@@ -977,148 +602,6 @@ client.on("interactionCreate", async interaction => {
         ephemeral: true
       });
     }
-  }
-
-  if (interaction.commandName === "play") {
-    const memberVoiceChannel = interaction.member.voice?.channel;
-    const query = interaction.options.getString("query");
-
-    if (!memberVoiceChannel || !memberVoiceChannel.isVoiceBased()) {
-      return interaction.reply({
-        content: "❌ ادخل روم صوتي أول ثم استخدم الأمر.",
-        ephemeral: true
-      });
-    }
-
-    await interaction.deferReply();
-
-    try {
-      const results = await play.search(query, {
-        limit: MUSIC_RESULT_LIMIT,
-        source: { youtube: "video" }
-      });
-
-      const videos = results.filter(video => video && video.url).slice(0, MUSIC_RESULT_LIMIT);
-
-      if (!videos.length) {
-        return interaction.editReply({
-          content: "❌ ما لقيت نتائج مناسبة."
-        });
-      }
-
-      const customId = `music_select_${interaction.id}`;
-
-      pendingMusicSelections.set(customId, {
-        userId: interaction.user.id,
-        voiceChannelId: memberVoiceChannel.id,
-        results: videos,
-        createdAt: Date.now()
-      });
-
-      setTimeout(() => {
-        pendingMusicSelections.delete(customId);
-      }, MUSIC_SELECT_TIMEOUT);
-
-      const embed = makeSearchResultsEmbed(query, videos, interaction.user);
-
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId(customId)
-        .setPlaceholder("اختر الأغنية التي تريد تشغيلها")
-        .addOptions(
-          videos.map((video, index) => ({
-            label: truncate(video.title, 100),
-            description: `المدة: ${video.durationRaw || "غير معروف"}`,
-            value: String(index)
-          }))
-        );
-
-      const row = new ActionRowBuilder().addComponents(menu);
-
-      return interaction.editReply({
-        embeds: [embed],
-        components: [row]
-      });
-    } catch (error) {
-      console.error("❌ Search error:", error);
-
-      return interaction.editReply({
-        content: "❌ صار خطأ أثناء البحث في يوتيوب."
-      });
-    }
-  }
-
-  if (interaction.commandName === "skip") {
-    const state = getMusicState(interaction.guild.id);
-
-    if (!state.current) {
-      return interaction.reply({
-        content: "❌ ما فيه شيء شغال الآن.",
-        ephemeral: true
-      });
-    }
-
-    state.player.stop(true);
-
-    return interaction.reply({
-      content: "⏭ تم تخطي الأغنية."
-    });
-  }
-
-  if (interaction.commandName === "stop") {
-    const state = getMusicState(interaction.guild.id);
-    state.queue = [];
-    state.current = null;
-    state.isPlaying = false;
-    state.player.stop(true);
-
-    await joinBaseVoiceChannel(interaction.guild).catch(() => {});
-
-    return interaction.reply({
-      content: "⏹ تم إيقاف الموسيقى وتصفير القائمة."
-    });
-  }
-
-  if (interaction.commandName === "pause") {
-    const state = getMusicState(interaction.guild.id);
-
-    if (!state.current) {
-      return interaction.reply({
-        content: "❌ ما فيه شيء شغال الآن.",
-        ephemeral: true
-      });
-    }
-
-    state.player.pause();
-
-    return interaction.reply({
-      content: "⏸ تم إيقاف الأغنية مؤقتًا."
-    });
-  }
-
-  if (interaction.commandName === "resume") {
-    const state = getMusicState(interaction.guild.id);
-
-    if (!state.current) {
-      return interaction.reply({
-        content: "❌ ما فيه شيء شغال الآن.",
-        ephemeral: true
-      });
-    }
-
-    state.player.unpause();
-
-    return interaction.reply({
-      content: "▶ تم استكمال التشغيل."
-    });
-  }
-
-  if (interaction.commandName === "queue") {
-    const embed = buildQueueEmbed(interaction.guild.id);
-
-    return interaction.reply({
-      embeds: [embed],
-      ephemeral: true
-    });
   }
 
   if (interaction.commandName === "send") {
@@ -1368,30 +851,22 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
   const botId = client.user.id;
 
   if (oldState.id === botId) {
-    const state = getMusicState(oldState.guild.id);
-    const expectedChannelId = state.allowedChannelId || VOICE_CHANNEL_ID;
-
-    if (oldState.channelId && newState.channelId && newState.channelId !== expectedChannelId) {
+    if (oldState.channelId && newState.channelId && newState.channelId !== VOICE_CHANNEL_ID) {
       try {
-        await newState.setChannel(expectedChannelId);
+        await newState.setChannel(VOICE_CHANNEL_ID);
       } catch {}
     }
 
     if (oldState.channelId && !newState.channelId) {
       try {
-        const targetChannel = oldState.guild.channels.cache.get(expectedChannelId);
+        const targetChannel = oldState.guild.channels.cache.get(VOICE_CHANNEL_ID);
         if (targetChannel && targetChannel.isVoiceBased()) {
-          const connection = joinVoiceChannel({
+          joinVoiceChannel({
             channelId: targetChannel.id,
             guildId: oldState.guild.id,
             adapterCreator: oldState.guild.voiceAdapterCreator,
             selfDeaf: true
           });
-
-          const musicState = getMusicState(oldState.guild.id);
-          musicState.connection = connection;
-          musicState.voiceChannelId = targetChannel.id;
-          musicState.connection.subscribe(musicState.player);
         }
       } catch {}
     }
