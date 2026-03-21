@@ -41,9 +41,12 @@ const WARN_ROLES = {
 };
 
 const warnings = new Map();
+
+/* 🔥 LEADERBOARD SYSTEM */
 const stats = new Map();
 const VOICE_TIMES = new Map();
 const LEADERBOARD_CHANNEL = "1484809257361870892";
+
 /*
 CLIENT
 */
@@ -53,7 +56,6 @@ intents:[
 GatewayIntentBits.Guilds,
 GatewayIntentBits.GuildMembers,
 GatewayIntentBits.GuildVoiceStates,
-
 GatewayIntentBits.GuildMessages,
 GatewayIntentBits.MessageContent
 ]
@@ -106,12 +108,11 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
 .setName("mediaonly")
-  ,
-  
+.setDescription("تشغيل او ايقاف نظام الصور فقط"),
+
 new SlashCommandBuilder()
 .setName("leaderboard")
 .setDescription("عرض التوب")
-.setDescription("تشغيل او ايقاف نظام الصور فقط")
 
 ].map(c=>c.toJSON());
 
@@ -155,7 +156,7 @@ selfDeaf:true
 
 });
 
-/* ✅ فلترة الروم */
+/* ✅ فلترة الروم + 🔥 عداد الرسائل */
 
 client.on("messageCreate", async (message) => {
 
@@ -170,11 +171,13 @@ return message.delete().catch(()=>{});
 if(message.content && message.content.trim() !== ""){
 return message.delete().catch(()=>{});
 }
-/* LEADERBOARD COUNT */
+
+/* 🔥 COUNT */
 if(!stats.has(message.author.id)){
 stats.set(message.author.id,{messages:0,voice:0});
 }
 stats.get(message.author.id).messages++;
+
 });
 
 /*
@@ -212,28 +215,9 @@ return interaction.reply({
 content: mediaOnlyEnabled ? "✅ تم تشغيل النظام" : "❌ تم ايقاف النظام",
 ephemeral:true
 });
-/* LEADERBOARD COMMAND */
-if(interaction.commandName === "leaderboard"){
 
-const sorted = [...stats.entries()]
-.sort((a,b)=> (b[1].messages + b[1].voice) - (a[1].messages + a[1].voice))
-.slice(0,10);
+}
 
-let text = "";
-
-sorted.forEach((user,index)=>{
-
-const id = user[0];
-const data = user[1];
-
-const hours = Math.floor(data.voice / 1000 / 60 / 60);
-const minutes = Math.floor((data.voice / 1000 / 60) % 60);
-
-text += `\n${index+1}. <@${id}>
-💬 ${data.messages} | ⏱ ${hours}h ${minutes}m\n`;
-
-});
-/* LEADERBOARD COMMAND */
 if(interaction.commandName === "leaderboard"){
 
 const sorted = [...stats.entries()]
@@ -267,20 +251,6 @@ if(channel){
 channel.send({embeds:[embed]});
 }
 
-}
-const embed = new EmbedBuilder()
-.setTitle("🏆 Leaderboard - النخبة")
-.setDescription(text || "لا يوجد بيانات")
-.setColor("#00ffcc");
-
-interaction.reply({embeds:[embed]});
-
-const channel = interaction.guild.channels.cache.get(LEADERBOARD_CHANNEL);
-if(channel){
-channel.send({embeds:[embed]});
-}
-
-}
 }
 
 /*
@@ -357,220 +327,8 @@ ephemeral:true
 
 }
 
-/*
-WARN SYSTEM
-*/
+/* 🔥 VOICE TRACK */
 
-if(interaction.commandName === "warn"){
-
-const target = interaction.options.getMember("user");
-const level = interaction.options.getInteger("level");
-const reason = interaction.options.getString("reason");
-
-warnings.set(target.id,{
-level:level,
-reason:reason,
-moderator:user.id,
-time:Date.now(),
-channel:interaction.channel.id
-});
-
-for(const role of Object.values(WARN_ROLES)){
-if(target.roles.cache.has(role)){
-await target.roles.remove(role).catch(()=>{});
-}
-}
-
-const roleId = WARN_ROLES[level];
-
-await target.roles.add(roleId).catch(()=>{});
-
-if(level === 4){
-await target.kick(reason).catch(()=>{});
-}
-
-if(level === 6){
-await target.ban({reason}).catch(()=>{});
-}
-
-const embed = new EmbedBuilder()
-
-.setColor("#e67e22")
-.setTitle("⚠ Warn Added")
-
-.addFields(
-{name:"👤 المستخدم",value:`<@${target.id}>`,inline:true},
-{name:"🆔 ID",value:target.id,inline:true},
-{name:"🚨 المستوى",value:`Warn ${level}`,inline:true},
-{name:"⚠ السبب",value:reason},
-{name:"🛡 المشرف",value:`<@${user.id}>`,inline:true},
-{name:"📍 الروم",value:`<#${interaction.channel.id}>`,inline:true},
-{name:"🖥 السيرفر",value:interaction.guild.name,inline:true}
-)
-
-.setTimestamp();
-
-interaction.reply({embeds:[embed]});
-
-sendLog(interaction, LOG_WARN, embed);
-
-}
-
-/*
-WARNINGS
-*/
-
-if(interaction.commandName === "warnings"){
-
-const target = interaction.options.getUser("user");
-
-const data = warnings.get(target.id);
-
-if(!data){
-
-return interaction.reply({
-content:"لا يوجد تحذيرات لهذا المستخدم",
-ephemeral:true
-});
-
-}
-
-const embed = new EmbedBuilder()
-
-.setColor("#f1c40f")
-.setTitle("⚠ Warnings List")
-
-.addFields(
-{name:"👤 المستخدم",value:`<@${target.id}>`,inline:true},
-{name:"🆔 ID",value:target.id,inline:true},
-{name:"🚨 المستوى",value:`Warn ${data.level}`,inline:true},
-{name:"⚠ السبب",value:data.reason},
-{name:"🛡 المشرف",value:`<@${data.moderator}>`,inline:true},
-{name:"📍 الروم",value:`<#${data.channel}>`,inline:true},
-{name:"🕒 وقت التحذير",value:`<t:${Math.floor(data.time/1000)}:F>`}
-)
-
-.setTimestamp()
-
-.setFooter({text:interaction.guild.name});
-
-interaction.reply({embeds:[embed]});
-
-sendLog(interaction, LOG_WARNINGS, embed);
-
-}
-
-/*
-CLEAR WARNINGS
-*/
-
-if(interaction.commandName === "clearwarnings"){
-
-const target = interaction.options.getMember("user");
-
-warnings.delete(target.id);
-
-for(const role of Object.values(WARN_ROLES)){
-if(target.roles.cache.has(role)){
-await target.roles.remove(role).catch(()=>{});
-}
-}
-
-interaction.reply({
-content:"تم مسح التحذيرات",
-ephemeral:true
-});
-
-const embed = new EmbedBuilder()
-
-.setColor("#2ecc71")
-.setTitle("🧹 Warnings Cleared")
-
-.addFields(
-{name:"👤 المستخدم",value:`<@${target.id}>`},
-{name:"🛡 بواسطة",value:`<@${user.id}>`}
-)
-
-.setTimestamp();
-
-sendLog(interaction, LOG_CLEARWARN, embed);
-
-}
-
-});
-
-/*
-WARN ROLE PROTECTION
-*/
-
-client.on("guildMemberUpdate", async (oldMember,newMember)=>{
-
-const data = warnings.get(newMember.id);
-if(!data) return;
-
-const warnRole = WARN_ROLES[data.level];
-if(!warnRole) return;
-
-const hadRole = oldMember.roles.cache.has(warnRole);
-const hasRole = newMember.roles.cache.has(warnRole);
-
-if(hadRole && !hasRole){
-
-const logs = await newMember.guild.fetchAuditLogs({
-limit:1,
-type:25
-}).catch(()=>null);
-
-if(!logs) return;
-
-const entry = logs.entries.first();
-if(!entry) return;
-
-if(entry.executor.id !== client.user.id){
-
-await newMember.roles.add(warnRole).catch(()=>{});
-
-}
-
-}
-
-});
-
-/* 🔥 حماية البوت الصوتي */
-
-client.on("voiceStateUpdate", async (oldState, newState) => {
-
-const botId = client.user.id;
-
-if(oldState.id !== botId) return;
-
-/* إذا اننقل */
-if(oldState.channelId && newState.channelId && newState.channelId !== VOICE_CHANNEL_ID){
-
-try{
-await newState.setChannel(VOICE_CHANNEL_ID);
-}catch{}
-
-}
-
-/* إذا انطرد */
-if(oldState.channelId && !newState.channelId){
-
-try{
-
-joinVoiceChannel({
-channelId: VOICE_CHANNEL_ID,
-guildId: oldState.guild.id,
-adapterCreator: oldState.guild.voiceAdapterCreator,
-selfDeaf: true
-});
-
-}catch{}
-
-}
-
-});
-/* VOICE TRACK */
 client.on("voiceStateUpdate",(oldState,newState)=>{
 
 const userId = newState.id;
