@@ -245,7 +245,7 @@ function buildLeaderboardEmbed(guild) {
       name: `${guild.name} Leaderboard`,
       iconURL: guild.iconURL({ dynamic: true }) || undefined
     })
-    .setTitle("🏆 لوحة النشاط")
+    .setTitle(" Leaderboards for N5BH ")
     .setDescription(description)
     .addFields(
       {
