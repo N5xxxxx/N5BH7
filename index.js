@@ -258,6 +258,24 @@ function buildLeaderboardEmbed(guild) {
     .setTimestamp();
 }
 
+async function findExistingLeaderboardMessage(channel) {
+  try {
+    const messages = await channel.messages.fetch({ limit: 20 });
+    const botMessages = messages.filter(msg =>
+      msg.author.id === client.user.id &&
+      msg.embeds.length > 0 &&
+      msg.components.length > 0 &&
+      msg.components.some(row =>
+        row.components.some(component => component.customId === "leaderboard_refresh")
+      )
+    );
+
+    return botMessages.first() || null;
+  } catch {
+    return null;
+  }
+}
+
 async function ensureLeaderboardMessage(guild) {
   const channel = guild.channels.cache.get(db.leaderboard.channelId);
   if (!channel || !channel.isTextBased()) return null;
@@ -270,6 +288,13 @@ async function ensureLeaderboardMessage(guild) {
       db.leaderboard.messageId = null;
       saveDatabase();
     }
+  }
+
+  const foundMessage = await findExistingLeaderboardMessage(channel);
+  if (foundMessage) {
+    db.leaderboard.messageId = foundMessage.id;
+    saveDatabase();
+    return foundMessage;
   }
 
   const embed = buildLeaderboardEmbed(guild);
@@ -537,16 +562,38 @@ client.on("interactionCreate", async interaction => {
 
     if (action === "setup") {
       db.leaderboard.channelId = LEADERBOARD_CHANNEL_ID;
-      db.leaderboard.messageId = null;
-      saveDatabase();
 
-      const msg = await ensureLeaderboardMessage(interaction.guild);
+      const existingChannel = interaction.guild.channels.cache.get(db.leaderboard.channelId);
+      let existingMessage = null;
+
+      if (db.leaderboard.messageId && existingChannel && existingChannel.isTextBased()) {
+        existingMessage = await existingChannel.messages.fetch(db.leaderboard.messageId).catch(() => null);
+      }
+
+      if (!existingMessage && existingChannel && existingChannel.isTextBased()) {
+        existingMessage = await findExistingLeaderboardMessage(existingChannel);
+        if (existingMessage) {
+          db.leaderboard.messageId = existingMessage.id;
+          saveDatabase();
+        }
+      }
+
+      if (!existingMessage) {
+        const msg = await ensureLeaderboardMessage(interaction.guild);
+        await updateLeaderboardMessage(interaction.guild);
+
+        return interaction.reply({
+          content: msg
+            ? `✅ تم إنشاء الليدر بورد في <#${LEADERBOARD_CHANNEL_ID}>`
+            : "❌ ما قدرت أنشئ رسالة الليدر بورد.",
+          ephemeral: true
+        });
+      }
+
       await updateLeaderboardMessage(interaction.guild);
 
       return interaction.reply({
-        content: msg
-          ? `✅ تم إنشاء الليدر بورد في <#${LEADERBOARD_CHANNEL_ID}>`
-          : "❌ ما قدرت أنشئ رسالة الليدر بورد.",
+        content: "✅ الليدر بورد موجود مسبقًا وتم تحديثه فقط.",
         ephemeral: true
       });
     }
