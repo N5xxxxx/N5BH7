@@ -10,13 +10,7 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  PermissionsBitField,
-  ChannelType,
-  UserSelectMenuBuilder
+  ButtonStyle
 } = require("discord.js");
 
 const { joinVoiceChannel } = require("@discordjs/voice");
@@ -32,13 +26,9 @@ const VIDEO_ROOM = "1477417977472090316";
 /* ✅ روم الليدر بورد + رتبة التحكم */
 const LEADERBOARD_CHANNEL_ID = "1484809257361870892";
 const LEADERBOARD_ROLE_ID = "1426999940944756889";
-const LEADERBOARD_UPDATE_INTERVAL = 5000;
 
-/* ✅ Temp Voice */
-const TEMPVOICE_CREATE_CHANNEL_ID = "1371180759829839973";
-const TEMPVOICE_CATEGORY_ID = "1367976354657730732";
-const TEMPVOICE_PANEL_CHANNEL_ID = "1371180760958238790";
-const TEMPVOICE_IMAGE_URL = "https://tempvoice.xyz/api/canvas?language=en&bitfield=8191&quality=2";
+/* ✅ تحديث تلقائي كل 5 ثواني */
+const LEADERBOARD_UPDATE_INTERVAL = 5000;
 
 /* ✅ حالة النظام */
 let mediaOnlyEnabled = true;
@@ -74,11 +64,6 @@ const db = {
     channelId: LEADERBOARD_CHANNEL_ID,
     messageId: null,
     users: {}
-  },
-  tempVoice: {
-    panelChannelId: TEMPVOICE_PANEL_CHANNEL_ID,
-    panelMessageId: null,
-    rooms: {}
   }
 };
 
@@ -105,11 +90,6 @@ function loadDatabase() {
       channelId: parsed.leaderboard?.channelId || LEADERBOARD_CHANNEL_ID,
       messageId: parsed.leaderboard?.messageId || null,
       users: parsed.leaderboard?.users || {}
-    };
-    db.tempVoice = {
-      panelChannelId: parsed.tempVoice?.panelChannelId || TEMPVOICE_PANEL_CHANNEL_ID,
-      panelMessageId: parsed.tempVoice?.panelMessageId || null,
-      rooms: parsed.tempVoice?.rooms || {}
     };
   } catch (error) {
     console.error("❌ Failed to load database:", error);
@@ -393,285 +373,6 @@ function warningMapDelete(userId) {
   scheduleSave();
 }
 
-/* TEMP VOICE */
-
-function buildTempVoiceEmbed(guild) {
-  return new EmbedBuilder()
-    .setColor("#f59e0b")
-    .setAuthor({
-      name: `${guild.name} TempVoice`,
-      iconURL: guild.iconURL({ dynamic: true }) || undefined
-    })
-    .setTitle("TempVoice Interface")
-    .setDescription([
-      "هذه اللوحة لإدارة الرومات المؤقتة.",
-      "أدخل روم الإنشاء وسيتم إنشاء رومك ونقلك إليه مباشرة.",
-      "",
-      "`Name` تغيير الاسم",
-      "`Limit` تغيير الحد",
-      "`Privacy` فتح/قفل الروم",
-      "`Waiting R.` وضع انتظار للروم",
-      "`Chat` إنشاء/حذف شات للروم",
-      "`Trust / Invite` السماح لعضو",
-      "`Untrust` إزالة السماح",
-      "`Kick` طرد عضو من الروم",
-      "`Block / Unblock` منع/فك المنع",
-      "`Claim` استلام الملكية",
-      "`Transfer` نقل الملكية",
-      "`Region` معلومات فقط",
-      "`Delete` حذف الروم"
-    ].join("\n"))
-    .setImage(TEMPVOICE_IMAGE_URL)
-    .setFooter({
-      text: "Press the buttons below to control your room"
-    });
-}
-
-function buildTempVoiceRows() {
-  return [
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("tempvoice_name").setLabel("Name").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("tempvoice_limit").setLabel("Limit").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("tempvoice_privacy").setLabel("Privacy").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("tempvoice_waiting").setLabel("Waiting R.").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("tempvoice_chat").setLabel("Chat").setStyle(ButtonStyle.Secondary)
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("tempvoice_trust").setLabel("Trust").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("tempvoice_untrust").setLabel("Untrust").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("tempvoice_invite").setLabel("Invite").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("tempvoice_kick").setLabel("Kick").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId("tempvoice_region").setLabel("Region").setStyle(ButtonStyle.Secondary)
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("tempvoice_block").setLabel("Block").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId("tempvoice_unblock").setLabel("Unblock").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("tempvoice_claim").setLabel("Claim").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("tempvoice_transfer").setLabel("Transfer").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("tempvoice_delete").setLabel("Delete").setStyle(ButtonStyle.Danger)
-    )
-  ];
-}
-
-function getTempVoiceRoomByOwner(ownerId) {
-  return Object.values(db.tempVoice.rooms).find(room => room.ownerId === ownerId) || null;
-}
-
-function getTempVoiceRoomByChannel(channelId) {
-  return db.tempVoice.rooms[channelId] || null;
-}
-
-function getTempVoiceRoomByTextChannel(textChannelId) {
-  return Object.values(db.tempVoice.rooms).find(room => room.textChannelId === textChannelId) || null;
-}
-
-async function ensureTempVoicePanel(guild) {
-  const channel = guild.channels.cache.get(db.tempVoice.panelChannelId);
-  if (!channel || !channel.isTextBased()) return null;
-
-  if (db.tempVoice.panelMessageId) {
-    try {
-      const message = await channel.messages.fetch(db.tempVoice.panelMessageId);
-      return message;
-    } catch {
-      db.tempVoice.panelMessageId = null;
-      saveDatabase();
-    }
-  }
-
-  const message = await channel.send({
-    embeds: [buildTempVoiceEmbed(guild)],
-    components: buildTempVoiceRows()
-  });
-
-  db.tempVoice.panelMessageId = message.id;
-  saveDatabase();
-  return message;
-}
-
-async function createTempVoiceRoom(member) {
-  const guild = member.guild;
-  const category = guild.channels.cache.get(TEMPVOICE_CATEGORY_ID);
-  if (!category) return null;
-
-  const existing = getTempVoiceRoomByOwner(member.id);
-  if (existing) {
-    const existingChannel = guild.channels.cache.get(existing.channelId);
-    if (existingChannel) return existingChannel;
-  }
-
-  const channel = await guild.channels.create({
-    name: `${member.displayName} • Room`,
-    type: ChannelType.GuildVoice,
-    parent: category.id,
-    userLimit: 0,
-    permissionOverwrites: [
-      {
-        id: guild.roles.everyone.id,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.Connect,
-          PermissionsBitField.Flags.Speak
-        ]
-      },
-      {
-        id: member.id,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.Connect,
-          PermissionsBitField.Flags.Speak,
-          PermissionsBitField.Flags.ManageChannels,
-          PermissionsBitField.Flags.MoveMembers
-        ]
-      }
-    ]
-  });
-
-  db.tempVoice.rooms[channel.id] = {
-    channelId: channel.id,
-    ownerId: member.id,
-    private: false,
-    waitingRoom: false,
-    textChannelId: null,
-    trustedUsers: [],
-    blockedUsers: [],
-    createdAt: Date.now()
-  };
-
-  saveDatabase();
-  return channel;
-}
-
-async function deleteTempVoiceRoom(guild, channelId) {
-  const data = getTempVoiceRoomByChannel(channelId);
-  if (!data) return;
-
-  const channel = guild.channels.cache.get(channelId);
-  const textChannel = data.textChannelId ? guild.channels.cache.get(data.textChannelId) : null;
-
-  delete db.tempVoice.rooms[channelId];
-  saveDatabase();
-
-  if (textChannel) await textChannel.delete().catch(() => {});
-  if (channel) await channel.delete().catch(() => {});
-}
-
-async function grantOwnerPerms(channel, ownerId) {
-  await channel.permissionOverwrites.edit(ownerId, {
-    ViewChannel: true,
-    Connect: true,
-    Speak: true,
-    ManageChannels: true,
-    MoveMembers: true
-  }).catch(() => {});
-}
-
-async function syncTempVoiceRoom(guild, roomData) {
-  const channel = guild.channels.cache.get(roomData.channelId);
-  if (!channel) return;
-
-  const everyoneConnect = !roomData.private && !roomData.waitingRoom;
-
-  await channel.permissionOverwrites.edit(guild.roles.everyone.id, {
-    ViewChannel: true,
-    Connect: everyoneConnect,
-    Speak: everyoneConnect
-  }).catch(() => {});
-
-  await grantOwnerPerms(channel, roomData.ownerId);
-
-  for (const userId of roomData.trustedUsers || []) {
-    await channel.permissionOverwrites.edit(userId, {
-      ViewChannel: true,
-      Connect: true,
-      Speak: true
-    }).catch(() => {});
-  }
-
-  for (const userId of roomData.blockedUsers || []) {
-    await channel.permissionOverwrites.edit(userId, {
-      ViewChannel: false,
-      Connect: false,
-      Speak: false
-    }).catch(() => {});
-  }
-}
-
-async function createOrDeleteTempVoiceTextChannel(guild, roomData) {
-  const voiceChannel = guild.channels.cache.get(roomData.channelId);
-  if (!voiceChannel) return null;
-
-  if (roomData.textChannelId) {
-    const textChannel = guild.channels.cache.get(roomData.textChannelId);
-    if (textChannel) {
-      await textChannel.delete().catch(() => {});
-    }
-
-    roomData.textChannelId = null;
-    saveDatabase();
-    return null;
-  }
-
-  const textChannel = await guild.channels.create({
-    name: `${voiceChannel.name.replace(/ • Room$/, "").toLowerCase().replace(/\s+/g, "-")}-chat`,
-    type: ChannelType.GuildText,
-    parent: TEMPVOICE_CATEGORY_ID,
-    permissionOverwrites: [
-      {
-        id: guild.roles.everyone.id,
-        deny: [PermissionsBitField.Flags.ViewChannel]
-      },
-      {
-        id: roomData.ownerId,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.ReadMessageHistory
-        ]
-      }
-    ]
-  });
-
-  for (const userId of roomData.trustedUsers || []) {
-    await textChannel.permissionOverwrites.edit(userId, {
-      ViewChannel: true,
-      SendMessages: true,
-      ReadMessageHistory: true
-    }).catch(() => {});
-  }
-
-  roomData.textChannelId = textChannel.id;
-  saveDatabase();
-  return textChannel;
-}
-
-function isRoomOwner(userId, roomData) {
-  return roomData && roomData.ownerId === userId;
-}
-
-async function getControllableTempRoom(interaction) {
-  const member = interaction.member;
-  const owned = getTempVoiceRoomByOwner(member.id);
-  if (owned) return owned;
-
-  if (member.voice?.channelId) {
-    const joined = getTempVoiceRoomByChannel(member.voice.channelId);
-    if (joined) return joined;
-  }
-
-  return null;
-}
-
-function buildUserSelect(customId, placeholder) {
-  return new ActionRowBuilder().addComponents(
-    new UserSelectMenuBuilder()
-      .setCustomId(customId)
-      .setPlaceholder(placeholder)
-      .setMinValues(1)
-      .setMaxValues(1)
-  );
-}
-
 function sendLog(interaction, channelId, embed, row) {
   const channel = interaction.guild.channels.cache.get(channelId);
 
@@ -755,11 +456,7 @@ const commands = [
       o.setName("user")
         .setDescription("عضو معين لعرض احصائياته")
         .setRequired(false)
-    ),
-
-  new SlashCommandBuilder()
-    .setName("tempvoicepanel")
-    .setDescription("إرسال أو تحديث لوحة التيمب فويس")
+    )
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -798,7 +495,6 @@ client.once("clientReady", async () => {
 
   await ensureLeaderboardMessage(guild);
   await updateLeaderboardMessage(guild);
-  await ensureTempVoicePanel(guild);
 
   if (leaderboardInterval) clearInterval(leaderboardInterval);
   leaderboardInterval = setInterval(() => {
@@ -825,424 +521,22 @@ client.on("messageCreate", async message => {
 });
 
 client.on("interactionCreate", async interaction => {
-  if (interaction.isButton()) {
-    if (interaction.customId === "leaderboard_refresh") {
-      if (!interaction.member || !hasLeaderboardRole(interaction.member)) {
-        return interaction.reply({
-          content: "❌ ما عندك صلاحية استخدام زر التحديث.",
-          ephemeral: true
-        });
-      }
+  if (!interaction.isButton()) return;
+  if (interaction.customId !== "leaderboard_refresh") return;
 
-      await updateLeaderboardMessage(interaction.guild);
-      return interaction.reply({ content: "✅ تم تحديث الليدر بورد.", ephemeral: true });
-    }
-
-    if (interaction.customId.startsWith("tempvoice_")) {
-      const roomData = await getControllableTempRoom(interaction);
-
-      if (!roomData) {
-        return interaction.reply({
-          content: "❌ لازم يكون عندك روم مؤقت أو تكون داخله.",
-          ephemeral: true
-        });
-      }
-
-      const channel = interaction.guild.channels.cache.get(roomData.channelId);
-      if (!channel) {
-        delete db.tempVoice.rooms[roomData.channelId];
-        saveDatabase();
-        return interaction.reply({ content: "❌ الروم غير موجود.", ephemeral: true });
-      }
-
-      const member = interaction.member;
-
-      if (
-        !["tempvoice_claim", "tempvoice_region"].includes(interaction.customId) &&
-        !isRoomOwner(member.id, roomData)
-      ) {
-        return interaction.reply({
-          content: "❌ فقط صاحب الروم يقدر يستخدم هذا الزر.",
-          ephemeral: true
-        });
-      }
-
-      if (interaction.customId === "tempvoice_name") {
-        const modal = new ModalBuilder()
-          .setCustomId(`tempvoice_modal_name_${roomData.channelId}`)
-          .setTitle("تغيير اسم الروم");
-
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId("room_name")
-              .setLabel("الاسم الجديد")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true)
-              .setMaxLength(32)
-          )
-        );
-
-        return interaction.showModal(modal);
-      }
-
-      if (interaction.customId === "tempvoice_limit") {
-        const modal = new ModalBuilder()
-          .setCustomId(`tempvoice_modal_limit_${roomData.channelId}`)
-          .setTitle("تغيير حد الروم");
-
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId("room_limit")
-              .setLabel("من 0 إلى 99")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true)
-              .setMaxLength(2)
-          )
-        );
-
-        return interaction.showModal(modal);
-      }
-
-      if (interaction.customId === "tempvoice_privacy") {
-        roomData.private = !roomData.private;
-        await syncTempVoiceRoom(interaction.guild, roomData);
-        saveDatabase();
-
-        return interaction.reply({
-          content: roomData.private ? "🔒 تم قفل الروم." : "🔓 تم فتح الروم.",
-          ephemeral: true
-        });
-      }
-
-      if (interaction.customId === "tempvoice_waiting") {
-        roomData.waitingRoom = !roomData.waitingRoom;
-        await syncTempVoiceRoom(interaction.guild, roomData);
-        saveDatabase();
-
-        return interaction.reply({
-          content: roomData.waitingRoom ? "⏳ تم تشغيل وضع الانتظار." : "✅ تم إيقاف وضع الانتظار.",
-          ephemeral: true
-        });
-      }
-
-      if (interaction.customId === "tempvoice_chat") {
-        const textChannel = await createOrDeleteTempVoiceTextChannel(interaction.guild, roomData);
-
-        return interaction.reply({
-          content: textChannel ? `💬 تم إنشاء الشات: <#${textChannel.id}>` : "🗑 تم حذف شات الروم.",
-          ephemeral: true
-        });
-      }
-
-      if (interaction.customId === "tempvoice_claim") {
-        const humans = channel.members.filter(m => !m.user.bot);
-        if (humans.has(roomData.ownerId)) {
-          return interaction.reply({
-            content: "❌ صاحب الروم ما زال موجود.",
-            ephemeral: true
-          });
-        }
-
-        roomData.ownerId = interaction.user.id;
-        await syncTempVoiceRoom(interaction.guild, roomData);
-        saveDatabase();
-
-        return interaction.reply({
-          content: "👑 تم استلام ملكية الروم.",
-          ephemeral: true
-        });
-      }
-
-      if (interaction.customId === "tempvoice_delete") {
-        await deleteTempVoiceRoom(interaction.guild, roomData.channelId);
-        return interaction.reply({ content: "🗑 تم حذف الروم المؤقت.", ephemeral: true });
-      }
-
-      if (interaction.customId === "tempvoice_region") {
-        return interaction.reply({
-          content: "🌍 Discord يعتمد تلقائيًا على أفضل منطقة صوتية. ما فيه تغيير يدوي مضمون بكل السيرفرات.",
-          ephemeral: true
-        });
-      }
-
-      if (interaction.customId === "tempvoice_trust") {
-        return interaction.reply({
-          content: "اختر العضو الذي تريد منحه صلاحية دائمة في الروم.",
-          components: [buildUserSelect(`tempvoice_select_trust_${roomData.channelId}`, "Select a user to trust")],
-          ephemeral: true
-        });
-      }
-
-      if (interaction.customId === "tempvoice_invite") {
-        return interaction.reply({
-          content: "اختر العضو الذي تريد دعوته للروم.",
-          components: [buildUserSelect(`tempvoice_select_invite_${roomData.channelId}`, "Select a user to invite")],
-          ephemeral: true
-        });
-      }
-
-      if (interaction.customId === "tempvoice_untrust") {
-        return interaction.reply({
-          content: "اختر العضو الذي تريد إزالة السماح عنه.",
-          components: [buildUserSelect(`tempvoice_select_untrust_${roomData.channelId}`, "Select a user to untrust")],
-          ephemeral: true
-        });
-      }
-
-      if (interaction.customId === "tempvoice_kick") {
-        return interaction.reply({
-          content: "اختر العضو الذي تريد طرده من الروم.",
-          components: [buildUserSelect(`tempvoice_select_kick_${roomData.channelId}`, "Select a user to kick")],
-          ephemeral: true
-        });
-      }
-
-      if (interaction.customId === "tempvoice_block") {
-        return interaction.reply({
-          content: "اختر العضو الذي تريد منعه من الروم.",
-          components: [buildUserSelect(`tempvoice_select_block_${roomData.channelId}`, "Select a user to block")],
-          ephemeral: true
-        });
-      }
-
-      if (interaction.customId === "tempvoice_unblock") {
-        return interaction.reply({
-          content: "اختر العضو الذي تريد فك الحظر عنه.",
-          components: [buildUserSelect(`tempvoice_select_unblock_${roomData.channelId}`, "Select a user to unblock")],
-          ephemeral: true
-        });
-      }
-
-      if (interaction.customId === "tempvoice_transfer") {
-        return interaction.reply({
-          content: "اختر العضو الذي تريد نقل الملكية له.",
-          components: [buildUserSelect(`tempvoice_select_transfer_${roomData.channelId}`, "Select a user to transfer ownership")],
-          ephemeral: true
-        });
-      }
-    }
+  if (!interaction.member || !hasLeaderboardRole(interaction.member)) {
+    return interaction.reply({
+      content: "❌ ما عندك صلاحية استخدام زر التحديث.",
+      ephemeral: true
+    });
   }
 
-  if (interaction.isUserSelectMenu()) {
-    if (!interaction.customId.startsWith("tempvoice_select_")) return;
+  await updateLeaderboardMessage(interaction.guild);
 
-    const parts = interaction.customId.split("_");
-    const action = parts[2];
-    const channelId = parts.slice(3).join("_");
-    const roomData = getTempVoiceRoomByChannel(channelId);
-
-    if (!roomData) {
-      return interaction.update({
-        content: "❌ الروم غير موجود.",
-        components: []
-      });
-    }
-
-    const targetId = interaction.values[0];
-    const guild = interaction.guild;
-    const channel = guild.channels.cache.get(channelId);
-    const targetMember = await guild.members.fetch(targetId).catch(() => null);
-
-    if (!channel || !targetMember) {
-      return interaction.update({
-        content: "❌ ما قدرت أحدد العضو أو الروم.",
-        components: []
-      });
-    }
-
-    if (action === "trust" || action === "invite") {
-      if (!roomData.trustedUsers.includes(targetId)) {
-        roomData.trustedUsers.push(targetId);
-      }
-
-      roomData.blockedUsers = roomData.blockedUsers.filter(id => id !== targetId);
-
-      await channel.permissionOverwrites.edit(targetId, {
-        ViewChannel: true,
-        Connect: true,
-        Speak: true
-      }).catch(() => {});
-
-      if (roomData.textChannelId) {
-        const textChannel = guild.channels.cache.get(roomData.textChannelId);
-        if (textChannel) {
-          await textChannel.permissionOverwrites.edit(targetId, {
-            ViewChannel: true,
-            SendMessages: true,
-            ReadMessageHistory: true
-          }).catch(() => {});
-        }
-      }
-
-      saveDatabase();
-
-      return interaction.update({
-        content: `✅ تم السماح لـ <@${targetId}> في الروم.`,
-        components: []
-      });
-    }
-
-    if (action === "untrust") {
-      roomData.trustedUsers = roomData.trustedUsers.filter(id => id !== targetId);
-
-      await channel.permissionOverwrites.delete(targetId).catch(() => {});
-      await syncTempVoiceRoom(guild, roomData);
-
-      if (roomData.textChannelId) {
-        const textChannel = guild.channels.cache.get(roomData.textChannelId);
-        if (textChannel) {
-          await textChannel.permissionOverwrites.delete(targetId).catch(() => {});
-        }
-      }
-
-      saveDatabase();
-
-      return interaction.update({
-        content: `✅ تم إزالة السماح عن <@${targetId}>.`,
-        components: []
-      });
-    }
-
-    if (action === "kick") {
-      if (targetMember.voice.channelId === channelId) {
-        await targetMember.voice.disconnect().catch(() => {});
-      }
-
-      return interaction.update({
-        content: `👢 تم طرد <@${targetId}> من الروم.`,
-        components: []
-      });
-    }
-
-    if (action === "block") {
-      if (!roomData.blockedUsers.includes(targetId)) {
-        roomData.blockedUsers.push(targetId);
-      }
-
-      roomData.trustedUsers = roomData.trustedUsers.filter(id => id !== targetId);
-
-      await channel.permissionOverwrites.edit(targetId, {
-        ViewChannel: false,
-        Connect: false,
-        Speak: false
-      }).catch(() => {});
-
-      if (roomData.textChannelId) {
-        const textChannel = guild.channels.cache.get(roomData.textChannelId);
-        if (textChannel) {
-          await textChannel.permissionOverwrites.edit(targetId, {
-            ViewChannel: false,
-            SendMessages: false,
-            ReadMessageHistory: false
-          }).catch(() => {});
-        }
-      }
-
-      if (targetMember.voice.channelId === channelId) {
-        await targetMember.voice.disconnect().catch(() => {});
-      }
-
-      saveDatabase();
-
-      return interaction.update({
-        content: `🚫 تم حظر <@${targetId}> من الروم.`,
-        components: []
-      });
-    }
-
-    if (action === "unblock") {
-      roomData.blockedUsers = roomData.blockedUsers.filter(id => id !== targetId);
-
-      await channel.permissionOverwrites.delete(targetId).catch(() => {});
-      await syncTempVoiceRoom(guild, roomData);
-
-      if (roomData.textChannelId) {
-        const textChannel = guild.channels.cache.get(roomData.textChannelId);
-        if (textChannel) {
-          await textChannel.permissionOverwrites.delete(targetId).catch(() => {});
-        }
-      }
-
-      saveDatabase();
-
-      return interaction.update({
-        content: `✅ تم فك الحظر عن <@${targetId}>.`,
-        components: []
-      });
-    }
-
-    if (action === "transfer") {
-      roomData.ownerId = targetId;
-      await grantOwnerPerms(channel, targetId);
-      saveDatabase();
-
-      return interaction.update({
-        content: `👑 تم نقل ملكية الروم إلى <@${targetId}>.`,
-        components: []
-      });
-    }
-  }
-
-  if (interaction.isModalSubmit()) {
-    if (interaction.customId.startsWith("tempvoice_modal_name_")) {
-      const channelId = interaction.customId.replace("tempvoice_modal_name_", "");
-      const roomData = getTempVoiceRoomByChannel(channelId);
-      if (!roomData || roomData.ownerId !== interaction.user.id) {
-        return interaction.reply({ content: "❌ ما عندك صلاحية.", ephemeral: true });
-      }
-
-      const channel = interaction.guild.channels.cache.get(channelId);
-      if (!channel) {
-        return interaction.reply({ content: "❌ الروم غير موجود.", ephemeral: true });
-      }
-
-      const newName = interaction.fields.getTextInputValue("room_name").trim().slice(0, 32);
-      await channel.setName(newName).catch(() => {});
-
-      if (roomData.textChannelId) {
-        const textChannel = interaction.guild.channels.cache.get(roomData.textChannelId);
-        if (textChannel) {
-          await textChannel.setName(`${newName.toLowerCase().replace(/\s+/g, "-")}-chat`.slice(0, 100)).catch(() => {});
-        }
-      }
-
-      return interaction.reply({
-        content: `✅ تم تغيير الاسم إلى: ${newName}`,
-        ephemeral: true
-      });
-    }
-
-    if (interaction.customId.startsWith("tempvoice_modal_limit_")) {
-      const channelId = interaction.customId.replace("tempvoice_modal_limit_", "");
-      const roomData = getTempVoiceRoomByChannel(channelId);
-      if (!roomData || roomData.ownerId !== interaction.user.id) {
-        return interaction.reply({ content: "❌ ما عندك صلاحية.", ephemeral: true });
-      }
-
-      const channel = interaction.guild.channels.cache.get(channelId);
-      if (!channel) {
-        return interaction.reply({ content: "❌ الروم غير موجود.", ephemeral: true });
-      }
-
-      const raw = interaction.fields.getTextInputValue("room_limit").trim();
-      const limit = Number(raw);
-
-      if (Number.isNaN(limit) || limit < 0 || limit > 99) {
-        return interaction.reply({
-          content: "❌ لازم تدخل رقم من 0 إلى 99.",
-          ephemeral: true
-        });
-      }
-
-      await channel.setUserLimit(limit).catch(() => {});
-      return interaction.reply({
-        content: `✅ تم تغيير الحد إلى: ${limit}`,
-        ephemeral: true
-      });
-    }
-  }
+  return interaction.reply({
+    content: "✅ تم تحديث الليدر بورد.",
+    ephemeral: true
+  });
 });
 
 client.on("interactionCreate", async interaction => {
@@ -1255,15 +549,6 @@ client.on("interactionCreate", async interaction => {
 
     return interaction.reply({
       content: mediaOnlyEnabled ? "✅ تم تشغيل النظام" : "❌ تم ايقاف النظام",
-      ephemeral: true
-    });
-  }
-
-  if (interaction.commandName === "tempvoicepanel") {
-    const message = await ensureTempVoicePanel(interaction.guild);
-
-    return interaction.reply({
-      content: message ? `✅ تم إرسال/تحديث بانل التيمب فويس في <#${TEMPVOICE_PANEL_CHANNEL_ID}>` : "❌ ما قدرت أرسل البانل.",
       ephemeral: true
     });
   }
@@ -1631,50 +916,16 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
 
   if (!oldChannelId && newChannelId) {
     startVoiceSession(member.id, newChannelId);
-
-    if (newChannelId === TEMPVOICE_CREATE_CHANNEL_ID) {
-      const channel = await createTempVoiceRoom(member);
-      if (channel) {
-        await newState.setChannel(channel.id).catch(() => {});
-      }
-    }
-
     return;
   }
 
   if (oldChannelId && !newChannelId) {
     endVoiceSession(member.id);
-
-    const oldRoom = getTempVoiceRoomByChannel(oldChannelId);
-    if (oldRoom) {
-      const oldChannel = oldState.guild.channels.cache.get(oldChannelId);
-      const humans = oldChannel?.members.filter(m => !m.user.bot).size || 0;
-      if (humans === 0) {
-        await deleteTempVoiceRoom(oldState.guild, oldChannelId);
-      }
-    }
-
     return;
   }
 
   if (oldChannelId && newChannelId && oldChannelId !== newChannelId) {
     moveVoiceSession(member.id, newChannelId);
-
-    const oldRoom = getTempVoiceRoomByChannel(oldChannelId);
-    if (oldRoom) {
-      const oldChannel = oldState.guild.channels.cache.get(oldChannelId);
-      const humans = oldChannel?.members.filter(m => !m.user.bot).size || 0;
-      if (humans === 0) {
-        await deleteTempVoiceRoom(oldState.guild, oldChannelId);
-      }
-    }
-
-    if (newChannelId === TEMPVOICE_CREATE_CHANNEL_ID) {
-      const channel = await createTempVoiceRoom(member);
-      if (channel) {
-        await newState.setChannel(channel.id).catch(() => {});
-      }
-    }
   }
 });
 
