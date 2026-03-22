@@ -10,7 +10,12 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  PermissionsBitField,
+  ChannelType
 } = require("discord.js");
 
 const { joinVoiceChannel } = require("@discordjs/voice");
@@ -26,9 +31,13 @@ const VIDEO_ROOM = "1477417977472090316";
 /* ✅ روم الليدر بورد + رتبة التحكم */
 const LEADERBOARD_CHANNEL_ID = "1484809257361870892";
 const LEADERBOARD_ROLE_ID = "1426999940944756889";
-
-/* ✅ تحديث تلقائي كل 5 ثواني */
 const LEADERBOARD_UPDATE_INTERVAL = 5000;
+
+/* ✅ Temp Voice */
+const TEMPVOICE_CREATE_CHANNEL_ID = "1371180759829839973";
+const TEMPVOICE_CATEGORY_ID = "1367976354657730732";
+const TEMPVOICE_PANEL_CHANNEL_ID = "1371180760958238790";
+const TEMPVOICE_IMAGE_URL = "https://tempvoice.xyz/api/canvas?language=en&bitfield=8191&quality=2";
 
 /* ✅ حالة النظام */
 let mediaOnlyEnabled = true;
@@ -55,6 +64,7 @@ const DATA_FILE = path.join(DATA_DIR, "bot-data.json");
 let saveTimeout = null;
 let leaderboardInterval = null;
 let leaderboardUpdating = false;
+let tempVoicePanelReady = false;
 
 const activeVoiceSessions = new Map();
 
@@ -64,6 +74,11 @@ const db = {
     channelId: LEADERBOARD_CHANNEL_ID,
     messageId: null,
     users: {}
+  },
+  tempVoice: {
+    panelChannelId: TEMPVOICE_PANEL_CHANNEL_ID,
+    panelMessageId: null,
+    rooms: {}
   }
 };
 
@@ -90,6 +105,11 @@ function loadDatabase() {
       channelId: parsed.leaderboard?.channelId || LEADERBOARD_CHANNEL_ID,
       messageId: parsed.leaderboard?.messageId || null,
       users: parsed.leaderboard?.users || {}
+    };
+    db.tempVoice = {
+      panelChannelId: parsed.tempVoice?.panelChannelId || TEMPVOICE_PANEL_CHANNEL_ID,
+      panelMessageId: parsed.tempVoice?.panelMessageId || null,
+      rooms: parsed.tempVoice?.rooms || {}
     };
   } catch (error) {
     console.error("❌ Failed to load database:", error);
@@ -213,16 +233,23 @@ function formatVoiceDuration(ms) {
   return `${hours} ساعة • ${minutes} دقيقة`;
 }
 
+function getLeaderboardScore(data) {
+  const messagePoints = data.messages * 1;
+  const voiceMinutes = Math.floor(data.voiceMs / 60000);
+  const voicePoints = voiceMinutes * 3;
+  return messagePoints + voicePoints;
+}
+
 function sortLeaderboardEntries() {
   return Object.entries(db.leaderboard.users).sort((a, b) => {
-    const aData = a[1];
-    const bData = b[1];
+    const aScore = getLeaderboardScore(a[1]);
+    const bScore = getLeaderboardScore(b[1]);
 
-    if (bData.messages !== aData.messages) {
-      return bData.messages - aData.messages;
+    if (bScore !== aScore) {
+      return bScore - aScore;
     }
 
-    return bData.voiceMs - aData.voiceMs;
+    return b[1].voiceMs - a[1].voiceMs;
   });
 }
 
@@ -234,7 +261,10 @@ function buildLeaderboardEmbed(guild) {
   const description = entries.length
     ? entries
         .map(([userId, data], index) => {
-          return `**#${index + 1}** | <@${userId}>\n> **الرسائل:** \`${data.messages}\` | **الوقت الصوتي:** \`${formatVoiceDuration(data.voiceMs)}\``;
+          return [
+            `**#${index + 1}** | <@${userId}>`,
+            `> **النقاط:** \`${getLeaderboardScore(data)}\` | **الرسائل:** \`${data.messages}\` | **الوقت الصوتي:** \`${formatVoiceDuration(data.voiceMs)}\``
+          ].join("\n");
         })
         .join("\n\n")
     : "لا يوجد بيانات حتى الآن.";
@@ -245,7 +275,7 @@ function buildLeaderboardEmbed(guild) {
       name: `${guild.name} Leaderboard`,
       iconURL: guild.iconURL({ dynamic: true }) || undefined
     })
-    .setTitle(" Leaderboards for N5BH ")
+    .setTitle("Leaderboards for N5BH")
     .setDescription(description)
     .addFields({
       name: "🕒 آخر تحديث",
@@ -253,7 +283,7 @@ function buildLeaderboardEmbed(guild) {
       inline: true
     })
     .setFooter({
-      text: "يتحدث تلقائيًا كل 5 ثواني"
+      text: "النقاط = الرسائل + وقت الفويس"
     })
     .setTimestamp();
 }
@@ -297,18 +327,16 @@ async function ensureLeaderboardMessage(guild) {
     return foundMessage;
   }
 
-  const embed = buildLeaderboardEmbed(guild);
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setLabel("تحديث الليدر بورد")
-      .setStyle(ButtonStyle.Secondary)
-      .setCustomId("leaderboard_refresh")
-  );
-
   const newMessage = await channel.send({
-    embeds: [embed],
-    components: [row]
+    embeds: [buildLeaderboardEmbed(guild)],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setLabel("تحديث الليدر بورد")
+          .setStyle(ButtonStyle.Secondary)
+          .setCustomId("leaderboard_refresh")
+      )
+    ]
   });
 
   db.leaderboard.messageId = newMessage.id;
@@ -328,18 +356,16 @@ async function updateLeaderboardMessage(guild) {
     const message = await ensureLeaderboardMessage(guild);
     if (!message) return;
 
-    const embed = buildLeaderboardEmbed(guild);
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setLabel("تحديث الليدر بورد")
-        .setStyle(ButtonStyle.Secondary)
-        .setCustomId("leaderboard_refresh")
-    );
-
     await message.edit({
-      embeds: [embed],
-      components: [row]
+      embeds: [buildLeaderboardEmbed(guild)],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setLabel("تحديث الليدر بورد")
+            .setStyle(ButtonStyle.Secondary)
+            .setCustomId("leaderboard_refresh")
+        )
+      ]
     });
 
     saveDatabase();
@@ -366,6 +392,181 @@ function warningMapSet(userId, value) {
 function warningMapDelete(userId) {
   delete db.warnings[userId];
   scheduleSave();
+}
+
+/* TEMP VOICE */
+
+function getTempVoiceRoomByOwner(ownerId) {
+  return Object.values(db.tempVoice.rooms).find(room => room.ownerId === ownerId) || null;
+}
+
+function getTempVoiceRoomByChannel(channelId) {
+  return db.tempVoice.rooms[channelId] || null;
+}
+
+function buildTempVoiceEmbed(guild) {
+  return new EmbedBuilder()
+    .setColor("#f59e0b")
+    .setAuthor({
+      name: `${guild.name} TempVoice`,
+      iconURL: guild.iconURL({ dynamic: true }) || undefined
+    })
+    .setTitle("TempVoice Interface")
+    .setDescription([
+      "هذه اللوحة لإدارة الرومات المؤقتة.",
+      "أدخل روم الإنشاء وسيتم إنشاء رومك ونقلك إليه مباشرة.",
+      "",
+      "`Rename` تغيير الاسم",
+      "`Limit` تغيير الحد",
+      "`Privacy` فتح/قفل الروم",
+      "`Claim` استلام الروم إذا المالك طلع",
+      "`Delete` حذف الروم"
+    ].join("\n"))
+    .setImage(TEMPVOICE_IMAGE_URL)
+    .setFooter({
+      text: "Press the buttons below to control your room"
+    });
+}
+
+function buildTempVoiceRow1() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("tempvoice_rename").setLabel("Name").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("tempvoice_limit").setLabel("Limit").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("tempvoice_privacy").setLabel("Privacy").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("tempvoice_claim").setLabel("Claim").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("tempvoice_delete").setLabel("Delete").setStyle(ButtonStyle.Danger)
+  );
+}
+
+async function ensureTempVoicePanel(guild) {
+  const channel = guild.channels.cache.get(db.tempVoice.panelChannelId);
+  if (!channel || !channel.isTextBased()) return null;
+
+  if (db.tempVoice.panelMessageId) {
+    try {
+      const message = await channel.messages.fetch(db.tempVoice.panelMessageId);
+      return message;
+    } catch {
+      db.tempVoice.panelMessageId = null;
+      saveDatabase();
+    }
+  }
+
+  const message = await channel.send({
+    embeds: [buildTempVoiceEmbed(guild)],
+    components: [buildTempVoiceRow1()]
+  });
+
+  db.tempVoice.panelMessageId = message.id;
+  saveDatabase();
+  return message;
+}
+
+async function createTempVoiceRoom(member) {
+  const guild = member.guild;
+  const category = guild.channels.cache.get(TEMPVOICE_CATEGORY_ID);
+  if (!category) return null;
+
+  const existing = getTempVoiceRoomByOwner(member.id);
+  if (existing) {
+    const existingChannel = guild.channels.cache.get(existing.channelId);
+    if (existingChannel) {
+      return existingChannel;
+    }
+  }
+
+  const channel = await guild.channels.create({
+    name: `${member.displayName} • Room`,
+    type: ChannelType.GuildVoice,
+    parent: category.id,
+    userLimit: 0,
+    permissionOverwrites: [
+      {
+        id: guild.roles.everyone.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.Connect,
+          PermissionsBitField.Flags.Speak
+        ]
+      },
+      {
+        id: member.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.Connect,
+          PermissionsBitField.Flags.Speak,
+          PermissionsBitField.Flags.ManageChannels,
+          PermissionsBitField.Flags.MoveMembers
+        ]
+      }
+    ]
+  });
+
+  db.tempVoice.rooms[channel.id] = {
+    channelId: channel.id,
+    ownerId: member.id,
+    private: false,
+    createdAt: Date.now()
+  };
+
+  saveDatabase();
+  return channel;
+}
+
+async function deleteTempVoiceRoom(guild, channelId) {
+  const data = getTempVoiceRoomByChannel(channelId);
+  if (!data) return;
+
+  const channel = guild.channels.cache.get(channelId);
+  delete db.tempVoice.rooms[channelId];
+  saveDatabase();
+
+  if (channel) {
+    await channel.delete().catch(() => {});
+  }
+}
+
+async function syncTempVoicePrivacy(guild, roomData) {
+  const channel = guild.channels.cache.get(roomData.channelId);
+  if (!channel) return;
+
+  await channel.permissionOverwrites.edit(guild.roles.everyone, {
+    ViewChannel: true,
+    Connect: !roomData.private,
+    Speak: !roomData.private
+  }).catch(() => {});
+
+  await channel.permissionOverwrites.edit(roomData.ownerId, {
+    ViewChannel: true,
+    Connect: true,
+    Speak: true,
+    ManageChannels: true,
+    MoveMembers: true
+  }).catch(() => {});
+}
+
+async function getControllableTempRoom(interaction) {
+  const member = interaction.member;
+  const owned = getTempVoiceRoomByOwner(member.id);
+  if (owned) return owned;
+
+  if (member.voice?.channelId) {
+    const joined = getTempVoiceRoomByChannel(member.voice.channelId);
+    if (joined) return joined;
+  }
+
+  return null;
+}
+
+function sendLog(interaction, channelId, embed, row) {
+  const channel = interaction.guild.channels.cache.get(channelId);
+
+  if (channel) {
+    channel.send({
+      embeds: [embed],
+      components: row ? [row] : []
+    }).catch(() => {});
+  }
 }
 
 const client = new Client({
@@ -440,7 +641,11 @@ const commands = [
       o.setName("user")
         .setDescription("عضو معين لعرض احصائياته")
         .setRequired(false)
-    )
+    ),
+
+  new SlashCommandBuilder()
+    .setName("tempvoicepanel")
+    .setDescription("إرسال أو تحديث لوحة التيمب فويس")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -474,17 +679,19 @@ client.once("clientReady", async () => {
     if (!state.member) return;
     if (state.member.user.bot) return;
     if (!state.channelId) return;
-
     startVoiceSession(state.id, state.channelId);
   });
 
   await ensureLeaderboardMessage(guild);
   await updateLeaderboardMessage(guild);
+  await ensureTempVoicePanel(guild);
 
   if (leaderboardInterval) clearInterval(leaderboardInterval);
   leaderboardInterval = setInterval(() => {
     updateLeaderboardMessage(guild).catch(() => {});
   }, LEADERBOARD_UPDATE_INTERVAL);
+
+  tempVoicePanelReady = true;
 });
 
 client.on("messageCreate", async message => {
@@ -505,34 +712,190 @@ client.on("messageCreate", async message => {
   }
 });
 
-function sendLog(interaction, channelId, embed, row) {
-  const channel = interaction.guild.channels.cache.get(channelId);
-
-  if (channel) {
-    channel.send({
-      embeds: [embed],
-      components: row ? [row] : []
-    }).catch(() => {});
-  }
-}
-
 client.on("interactionCreate", async interaction => {
-  if (!interaction.isButton()) return;
-  if (interaction.customId !== "leaderboard_refresh") return;
+  if (interaction.isButton()) {
+    if (interaction.customId === "leaderboard_refresh") {
+      if (!interaction.member || !hasLeaderboardRole(interaction.member)) {
+        return interaction.reply({
+          content: "❌ ما عندك صلاحية استخدام زر التحديث.",
+          ephemeral: true
+        });
+      }
 
-  if (!interaction.member || !hasLeaderboardRole(interaction.member)) {
-    return interaction.reply({
-      content: "❌ ما عندك صلاحية استخدام زر التحديث.",
-      ephemeral: true
-    });
+      await updateLeaderboardMessage(interaction.guild);
+
+      return interaction.reply({
+        content: "✅ تم تحديث الليدر بورد.",
+        ephemeral: true
+      });
+    }
+
+    if (interaction.customId.startsWith("tempvoice_")) {
+      const roomData = await getControllableTempRoom(interaction);
+
+      if (!roomData) {
+        return interaction.reply({
+          content: "❌ لازم يكون عندك روم مؤقت أو تكون داخله.",
+          ephemeral: true
+        });
+      }
+
+      const channel = interaction.guild.channels.cache.get(roomData.channelId);
+      if (!channel) {
+        delete db.tempVoice.rooms[roomData.channelId];
+        saveDatabase();
+        return interaction.reply({
+          content: "❌ الروم غير موجود.",
+          ephemeral: true
+        });
+      }
+
+      if (interaction.customId === "tempvoice_privacy") {
+        roomData.private = !roomData.private;
+        await syncTempVoicePrivacy(interaction.guild, roomData);
+        saveDatabase();
+
+        return interaction.reply({
+          content: roomData.private ? "🔒 تم قفل الروم." : "🔓 تم فتح الروم.",
+          ephemeral: true
+        });
+      }
+
+      if (interaction.customId === "tempvoice_delete") {
+        if (roomData.ownerId !== interaction.user.id) {
+          return interaction.reply({
+            content: "❌ فقط صاحب الروم يقدر يحذفه.",
+            ephemeral: true
+          });
+        }
+
+        await deleteTempVoiceRoom(interaction.guild, roomData.channelId);
+
+        return interaction.reply({
+          content: "🗑 تم حذف الروم المؤقت.",
+          ephemeral: true
+        });
+      }
+
+      if (interaction.customId === "tempvoice_claim") {
+        const members = channel.members.filter(m => !m.user.bot);
+        if (members.has(roomData.ownerId)) {
+          return interaction.reply({
+            content: "❌ صاحب الروم ما زال موجود.",
+            ephemeral: true
+          });
+        }
+
+        roomData.ownerId = interaction.user.id;
+        await syncTempVoicePrivacy(interaction.guild, roomData);
+        saveDatabase();
+
+        return interaction.reply({
+          content: "👑 تم استلام ملكية الروم.",
+          ephemeral: true
+        });
+      }
+
+      if (interaction.customId === "tempvoice_rename") {
+        if (roomData.ownerId !== interaction.user.id) {
+          return interaction.reply({
+            content: "❌ فقط صاحب الروم يقدر يغير الاسم.",
+            ephemeral: true
+          });
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId(`tempvoice_modal_name_${roomData.channelId}`)
+          .setTitle("تغيير اسم الروم");
+
+        const input = new TextInputBuilder()
+          .setCustomId("room_name")
+          .setLabel("الاسم الجديد")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMaxLength(32);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === "tempvoice_limit") {
+        if (roomData.ownerId !== interaction.user.id) {
+          return interaction.reply({
+            content: "❌ فقط صاحب الروم يقدر يغير العدد.",
+            ephemeral: true
+          });
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId(`tempvoice_modal_limit_${roomData.channelId}`)
+          .setTitle("تغيير الحد");
+
+        const input = new TextInputBuilder()
+          .setCustomId("room_limit")
+          .setLabel("العدد من 0 إلى 99")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMaxLength(2);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        return interaction.showModal(modal);
+      }
+    }
   }
 
-  await updateLeaderboardMessage(interaction.guild);
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId.startsWith("tempvoice_modal_name_")) {
+      const channelId = interaction.customId.replace("tempvoice_modal_name_", "");
+      const roomData = getTempVoiceRoomByChannel(channelId);
+      if (!roomData || roomData.ownerId !== interaction.user.id) {
+        return interaction.reply({ content: "❌ ما عندك صلاحية.", ephemeral: true });
+      }
 
-  return interaction.reply({
-    content: "✅ تم تحديث الليدر بورد.",
-    ephemeral: true
-  });
+      const channel = interaction.guild.channels.cache.get(channelId);
+      if (!channel) {
+        return interaction.reply({ content: "❌ الروم غير موجود.", ephemeral: true });
+      }
+
+      const newName = interaction.fields.getTextInputValue("room_name").trim().slice(0, 32);
+      await channel.setName(newName).catch(() => {});
+
+      return interaction.reply({
+        content: `✅ تم تغيير الاسم إلى: ${newName}`,
+        ephemeral: true
+      });
+    }
+
+    if (interaction.customId.startsWith("tempvoice_modal_limit_")) {
+      const channelId = interaction.customId.replace("tempvoice_modal_limit_", "");
+      const roomData = getTempVoiceRoomByChannel(channelId);
+      if (!roomData || roomData.ownerId !== interaction.user.id) {
+        return interaction.reply({ content: "❌ ما عندك صلاحية.", ephemeral: true });
+      }
+
+      const channel = interaction.guild.channels.cache.get(channelId);
+      if (!channel) {
+        return interaction.reply({ content: "❌ الروم غير موجود.", ephemeral: true });
+      }
+
+      const raw = interaction.fields.getTextInputValue("room_limit").trim();
+      const limit = Number(raw);
+
+      if (Number.isNaN(limit) || limit < 0 || limit > 99) {
+        return interaction.reply({
+          content: "❌ لازم تدخل رقم من 0 إلى 99.",
+          ephemeral: true
+        });
+      }
+
+      await channel.setUserLimit(limit).catch(() => {});
+
+      return interaction.reply({
+        content: `✅ تم تغيير الحد إلى: ${limit}`,
+        ephemeral: true
+      });
+    }
+  }
 });
 
 client.on("interactionCreate", async interaction => {
@@ -545,6 +908,15 @@ client.on("interactionCreate", async interaction => {
 
     return interaction.reply({
       content: mediaOnlyEnabled ? "✅ تم تشغيل النظام" : "❌ تم ايقاف النظام",
+      ephemeral: true
+    });
+  }
+
+  if (interaction.commandName === "tempvoicepanel") {
+    const message = await ensureTempVoicePanel(interaction.guild);
+
+    return interaction.reply({
+      content: message ? `✅ تم إرسال/تحديث بانل التيمب فويس في <#${TEMPVOICE_PANEL_CHANNEL_ID}>` : "❌ ما قدرت أرسل البانل.",
       ephemeral: true
     });
   }
@@ -622,6 +994,11 @@ client.on("interactionCreate", async interaction => {
         .setDescription(`<@${targetUser.id}>`)
         .addFields(
           {
+            name: "⭐ النقاط",
+            value: `${getLeaderboardScore(stats)}`,
+            inline: true
+          },
+          {
             name: "💬 عدد الرسائل",
             value: `${stats.messages}`,
             inline: true
@@ -629,13 +1006,6 @@ client.on("interactionCreate", async interaction => {
           {
             name: "🎤 الوقت الصوتي",
             value: formatVoiceDuration(stats.voiceMs),
-            inline: true
-          },
-          {
-            name: "🕒 آخر تحديث",
-            value: stats.updatedAt
-              ? `<t:${Math.floor(stats.updatedAt / 1000)}:R>`
-              : "غير متوفر",
             inline: true
           }
         )
@@ -796,7 +1166,6 @@ client.on("interactionCreate", async interaction => {
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
-
     sendLog(interaction, LOG_WARN, embed);
   }
 
@@ -827,7 +1196,6 @@ client.on("interactionCreate", async interaction => {
       .setFooter({ text: interaction.guild.name });
 
     await interaction.reply({ embeds: [embed] });
-
     sendLog(interaction, LOG_WARNINGS, embed);
   }
 
@@ -930,16 +1298,50 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
 
   if (!oldChannelId && newChannelId) {
     startVoiceSession(member.id, newChannelId);
+
+    if (newChannelId === TEMPVOICE_CREATE_CHANNEL_ID) {
+      const channel = await createTempVoiceRoom(member);
+      if (channel) {
+        await newState.setChannel(channel.id).catch(() => {});
+      }
+    }
+
     return;
   }
 
   if (oldChannelId && !newChannelId) {
     endVoiceSession(member.id);
+
+    const oldRoom = getTempVoiceRoomByChannel(oldChannelId);
+    if (oldRoom) {
+      const oldChannel = oldState.guild.channels.cache.get(oldChannelId);
+      const humans = oldChannel?.members.filter(m => !m.user.bot).size || 0;
+      if (humans === 0) {
+        await deleteTempVoiceRoom(oldState.guild, oldChannelId);
+      }
+    }
+
     return;
   }
 
   if (oldChannelId && newChannelId && oldChannelId !== newChannelId) {
     moveVoiceSession(member.id, newChannelId);
+
+    const oldRoom = getTempVoiceRoomByChannel(oldChannelId);
+    if (oldRoom) {
+      const oldChannel = oldState.guild.channels.cache.get(oldChannelId);
+      const humans = oldChannel?.members.filter(m => !m.user.bot).size || 0;
+      if (humans === 0) {
+        await deleteTempVoiceRoom(oldState.guild, oldChannelId);
+      }
+    }
+
+    if (newChannelId === TEMPVOICE_CREATE_CHANNEL_ID) {
+      const channel = await createTempVoiceRoom(member);
+      if (channel) {
+        await newState.setChannel(channel.id).catch(() => {});
+      }
+    }
   }
 });
 
